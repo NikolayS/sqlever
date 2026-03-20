@@ -134,6 +134,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
       const val = argv[i + 1];
       if (val === "json" || val === "text") {
         result.format = val;
+        // When a command is already set, also forward to rest so that
+        // command-specific parsers (e.g. analyze) can see the flag.
+        if (result.command !== undefined) {
+          result.rest.push(arg, val);
+        }
+      } else if (result.command !== undefined) {
+        // Command-specific format value (e.g. github-annotations,
+        // gitlab-codequality for the analyze command) — pass through to rest
+        // without rejecting.
+        result.rest.push(arg, val ?? "");
       } else {
         process.stderr.write(
           `sqlever: invalid --format value '${val ?? ""}'. Expected 'text' or 'json'.\n`,
