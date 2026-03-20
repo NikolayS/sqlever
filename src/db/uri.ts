@@ -141,7 +141,13 @@ function buildUri(scheme: string, parsed: ParsedUri): string {
     uri += "@";
   }
 
-  uri += parsed.host;
+  // Wrap IPv6 addresses in brackets (RFC 2732). An IPv6 literal
+  // contains colons, so we detect it by checking for ':'.
+  if (parsed.host.includes(":")) {
+    uri += "[" + parsed.host + "]";
+  } else {
+    uri += parsed.host;
+  }
 
   if (parsed.port !== DEFAULT_PORT) {
     uri += ":" + parsed.port;

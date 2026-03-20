@@ -235,6 +235,30 @@ describe("toStandardUri", () => {
     expect(uri).toBe("postgresql://alice@host/db?sslmode=require");
   });
 
+  it("wraps IPv6 host in brackets", () => {
+    const uri = toStandardUri({
+      user: "user",
+      password: "pass",
+      host: "::1",
+      port: 5432,
+      database: "db",
+      params: {},
+    });
+    expect(uri).toBe("postgresql://user:pass@[::1]/db");
+  });
+
+  it("wraps full IPv6 host in brackets with non-default port", () => {
+    const uri = toStandardUri({
+      user: "user",
+      password: "pass",
+      host: "2001:db8::1",
+      port: 5433,
+      database: "db",
+      params: {},
+    });
+    expect(uri).toBe("postgresql://user:pass@[2001:db8::1]:5433/db");
+  });
+
   it("encodes special characters in user and password", () => {
     const uri = toStandardUri({
       user: "us@er",
@@ -331,6 +355,8 @@ describe("round-trip conversion", () => {
     "postgresql://user@host/db",
     "postgresql://host/db",
     "postgresql://user:pass@localhost:5432/testdb",
+    "postgresql://user:pass@[::1]:5432/db",
+    "postgresql://user:pass@[2001:db8::1]:5433/mydb",
   ];
 
   for (const uri of testUris) {

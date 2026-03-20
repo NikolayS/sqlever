@@ -184,16 +184,24 @@ export class DatabaseClient {
 
     // Use a single SET command batch for efficiency. Each SET is a
     // separate statement because PostgreSQL doesn't support multi-SET.
+    // Numeric timeouts are safe to interpolate (they are validated ints),
+    // but application_name is user-controlled text, so we use
+    // set_config() with a parameterized query to avoid SQL injection.
     const statements = [
       `SET statement_timeout = ${statementTimeout}`,
       `SET lock_timeout = ${lockTimeout}`,
       `SET idle_in_transaction_session_timeout = ${idleInTransactionSessionTimeout}`,
-      `SET application_name = '${appName}'`,
     ];
 
     for (const stmt of statements) {
       await this.client.query(stmt);
     }
+
+    // Use set_config() with a parameter to safely handle special
+    // characters (e.g., single quotes) in the application name.
+    await this.client.query("SELECT set_config('application_name', $1, false)", [
+      appName,
+    ]);
 
     logVerbose(
       `Session settings applied: statement_timeout=${statementTimeout}, ` +

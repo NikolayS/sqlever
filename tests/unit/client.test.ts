@@ -151,9 +151,12 @@ describe("DatabaseClient", () => {
       expect(queryTexts).toContain(
         "SET idle_in_transaction_session_timeout = 600000",
       );
-      expect(queryTexts).toContain(
-        "SET application_name = 'sqlever/deploy/myproject'",
+      // application_name uses parameterized set_config() to avoid SQL injection
+      const appNameQuery = pgClient.queries.find(
+        (q) => q.text === "SELECT set_config('application_name', $1, false)",
       );
+      expect(appNameQuery).toBeDefined();
+      expect(appNameQuery!.values).toEqual(["sqlever/deploy/myproject"]);
     });
 
     it("applies custom session settings", async () => {
@@ -173,6 +176,29 @@ describe("DatabaseClient", () => {
       expect(queryTexts).toContain(
         "SET idle_in_transaction_session_timeout = 300000",
       );
+    });
+
+    it("safely handles single quotes in application_name", async () => {
+      const client = new DatabaseClient("postgresql://host/db", {
+        command: "deploy",
+        project: "O'Reilly's project",
+      });
+      await client.connect();
+
+      const pgClient = mockInstances[0]!;
+      // Should use parameterized set_config, not string interpolation
+      const appNameQuery = pgClient.queries.find(
+        (q) => q.text === "SELECT set_config('application_name', $1, false)",
+      );
+      expect(appNameQuery).toBeDefined();
+      expect(appNameQuery!.values).toEqual([
+        "sqlever/deploy/O'Reilly's project",
+      ]);
+      // Must NOT contain any SET application_name = '...' query
+      const unsafeSetQuery = pgClient.queries.find(
+        (q) => q.text.startsWith("SET application_name"),
+      );
+      expect(unsafeSetQuery).toBeUndefined();
     });
 
     it("exits with code 10 on connection failure", async () => {
