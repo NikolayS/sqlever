@@ -28,6 +28,14 @@ export interface PsqlRunOptions {
 
   /** Working directory for psql process (for \i relative paths). */
   workingDir?: string;
+
+  /**
+   * Lock timeout in milliseconds. When set, adds
+   * `-c "SET lock_timeout = '<ms>ms'"` before `-f <script>` so the
+   * lock_timeout is applied to the psql session without modifying the
+   * script file. See SPEC 5.9 (Lock timeout guard).
+   */
+  lockTimeout?: number;
 }
 
 export interface PsqlRunResult {
@@ -213,6 +221,14 @@ export function buildPsqlCommand(
     env["PGPASSWORD"] = password;
   }
   args.push("--dbname", cleanUri);
+
+  // --- Lock timeout guard (SPEC 5.9) ---
+  // When lockTimeout is set, prepend a -c "SET lock_timeout = '<ms>ms'"
+  // command before the script file. psql executes -c commands in order,
+  // so the SET takes effect before the script runs.
+  if (options.lockTimeout != null && options.lockTimeout >= 0) {
+    args.push("-c", `SET lock_timeout = '${options.lockTimeout}ms'`);
+  }
 
   // --- Script file ---
   args.push("-f", scriptPath);
