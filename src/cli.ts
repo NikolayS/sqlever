@@ -317,11 +317,15 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   }
 
   if (args.command === "revert") {
-    runRevert(args).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`sqlever revert: ${msg}\n`);
-      process.exit(1);
-    });
+    runRevert(args)
+      .then((exitCode) => {
+        if (exitCode !== 0) process.exit(exitCode);
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`sqlever revert: ${msg}\n`);
+        process.exit(1);
+      });
     return;
   }
 
