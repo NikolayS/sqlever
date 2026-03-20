@@ -4,6 +4,7 @@
 - **Status:** Pre-development — spec review in progress, no implementation yet
 - **License:** Apache 2.0
 - **Changelog:** [SPEC-CHANGELOG.md](SPEC-CHANGELOG.md)
+- **Location:** `spec/`
 
 ---
 
