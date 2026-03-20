@@ -1,6 +1,6 @@
 # stitch — Product Specification
 
-- **Version:** 0.5 (draft)
+- **Version:** 0.6 (draft)
 - **Status:** Pre-development — spec review in progress, no implementation yet
 - **License:** Apache 2.0
 - **Changelog:** [SPEC-CHANGELOG.md](SPEC-CHANGELOG.md)
@@ -191,7 +191,7 @@ Where `\0` is a null byte, `<content_length>` is the decimal string length of `<
 project <project_name>
 uri <project_uri>                    ← conditional: only if project has a URI (%uri pragma)
 change <change_name>
-parent <parent_change_id>            ← conditional: only if this is a reworked change
+parent <parent_change_id>            ← conditional: only if this change has a preceding change in the plan (i.e., not the first change)
 planner <planner_name> <<planner_email>>
 date <planned_at_iso8601>
 requires                             ← conditional: only if change has requires dependencies
@@ -203,7 +203,7 @@ conflicts                            ← conditional: only if change has conflic
 <note text>                          ← conditional: raw note text (no "note" prefix), only if note is non-empty
 ```
 
-Key differences from earlier spec versions: (1) `uri` line is conditional on the project having a `%uri` pragma, (2) `parent` line appears only for reworked changes, (3) requires and conflicts use section headers with indented entries (not `require <dep>` per line), (4) note is raw text after a blank line separator (not `note <text>`), (5) the blank line and note are only present when the note is non-empty. Requires and conflicts entries preserve declaration order (not sorted).
+Key differences from earlier spec versions: (1) `uri` line is conditional on the project having a `%uri` pragma, (2) `parent` line appears for ANY change that has a preceding change in the plan (not just reworked changes — every change except the first has a parent), (3) requires and conflicts use section headers with indented entries (not `require <dep>` per line), (4) note is raw text after a blank line separator (not `note <text>`), (5) the blank line and note are only present when the note is non-empty. Requires and conflicts entries preserve declaration order (not sorted).
 
 stitch must compute identical IDs. Since `change_id` is the primary key in `sqitch.changes`, any divergence will break the mid-deploy handoff scenario.
 
@@ -217,7 +217,7 @@ Where `<content>` is the concatenation of the following lines (each terminated b
 ```
 project <project_name>
 uri <project_uri>                    ← conditional: only if project has a URI
-tag <tag_name>
+tag @<tag_name>
 change <change_id>
 planner <planner_name> <<planner_email>>
 date <planned_at_iso8601>
@@ -225,7 +225,7 @@ date <planned_at_iso8601>
 <note text>                          ← conditional: raw note text, only if note is non-empty
 ```
 
-Like change IDs, the `uri` line is conditional, and the note appears as raw text after a blank line separator (only when non-empty).
+Like change IDs, the `uri` line is conditional, and the note appears as raw text after a blank line separator (only when non-empty). Note: `tag_name` in the info string uses `format_name`, which prepends `@` — so a tag named `v1.0` produces the line `tag @v1.0`, not `tag v1.0`. This is critical for computing correct tag IDs.
 
 ### R3 — Tracking schema compatibility
 
@@ -295,12 +295,12 @@ CREATE TABLE sqitch.tags (
 **`sqitch.dependencies`:**
 ```sql
 CREATE TABLE sqitch.dependencies (
-    change_id    TEXT NOT NULL REFERENCES sqitch.changes(change_id) ON UPDATE CASCADE,
+    change_id    TEXT NOT NULL REFERENCES sqitch.changes(change_id) ON UPDATE CASCADE ON DELETE CASCADE,
     type         TEXT NOT NULL,  -- 'require' or 'conflict'
     dependency   TEXT NOT NULL,
-    dependency_id TEXT,
+    dependency_id TEXT NULL REFERENCES sqitch.changes(change_id) ON UPDATE CASCADE,
     PRIMARY KEY (change_id, dependency),
-    CHECK (
+    CONSTRAINT dependencies_check CHECK (
         (type = 'require' AND dependency_id IS NOT NULL)
         OR (type = 'conflict' AND dependency_id IS NULL)
     )
@@ -378,7 +378,7 @@ Analyze migration SQL before deploy and flag dangerous patterns. Moved from v1.1
 
 | Rule ID | Severity | Type | Trigger | Why dangerous |
 |---------|----------|------|---------|---------------|
-| `SA001` | error | static | `ADD COLUMN ... NOT NULL` without default | Fails outright on populated tables (`ERROR: column contains null values`). |
+| `SA001` | error | static | `ADD COLUMN ... NOT NULL` without default | Fails outright on populated tables (`ERROR: column contains null values`). Does NOT fire when a `DEFAULT` is present — the default satisfies the NOT NULL constraint, and that case is covered by SA002/SA002b. |
 | `SA002` | error | static | `ADD COLUMN ... DEFAULT <volatile>` (any PG version) | Volatile defaults (e.g., `random()`, `gen_random_uuid()`, `clock_timestamp()`, `txid_current()`) cause a full table rewrite on ALL PostgreSQL versions, including PG 11+. The PG 11 optimization only applies to immutable/stable defaults. Note: `now()` is `STABLE` (returns transaction start time), not volatile — `DEFAULT now()` does NOT cause a rewrite on PG 11+. |
 | `SA002b` | warn | static | `ADD COLUMN ... DEFAULT <non-volatile>` on PG < 11 | Non-volatile defaults cause a full table rewrite on PG < 11. Safe on PG 11+ (metadata-only). |
 | `SA003` | error | static | `ALTER COLUMN ... TYPE` (unsafe cast) | Full table rewrite + `AccessExclusiveLock`. See safe cast allowlist below. |
@@ -394,7 +394,7 @@ Analyze migration SQL before deploy and flag dangerous patterns. Moved from v1.1
 | `SA013` | warn | static | `SET lock_timeout` missing before risky DDL | Runaway lock wait. "Risky DDL" = any DDL taking `AccessExclusiveLock` or `ShareLock`. If lock timeout guard (5.9) auto-prepends, SA013 does not fire. |
 | `SA014` | warn | static | `VACUUM FULL` or `CLUSTER` | Full table lock + rewrite, avoid in migrations. |
 | `SA015` | warn | static | `ALTER TABLE ... RENAME` (table or column) | Breaks running application. Severity is `warn` (not `error`) until expand/contract (v2.0) exists, since there is no way to satisfy the rule before then. After v2.0, promote to `error` for renames not part of an expand/contract pair. |
-| `SA016` | error | static | `ADD CONSTRAINT ... CHECK` without `NOT VALID` | Full table scan under `AccessExclusiveLock` (PG < 16) / `ShareUpdateExclusiveLock` (PG 16+) — blocks all concurrent access on older versions, and scan duration keeps the lock held. Safe pattern: `ADD CONSTRAINT ... NOT VALID` then `VALIDATE CONSTRAINT`. |
+| `SA016` | error | static | `ADD CONSTRAINT ... CHECK` without `NOT VALID` | Full table scan under `ShareLock` (PG < 16) / `ShareUpdateExclusiveLock` (PG 16+) — `ShareLock` blocks INSERT/UPDATE/DELETE for the duration of the validation scan. Safe pattern: `ADD CONSTRAINT ... NOT VALID` then `VALIDATE CONSTRAINT`. |
 | `SA017` | error | hybrid | `ALTER COLUMN ... SET NOT NULL` (existing column) | Static: fires on any `SET NOT NULL` (on PG < 12, full table scan under `AccessExclusiveLock`; on PG 12+, metadata-only if a valid CHECK constraint exists). Connected: checks catalog for existing valid `CHECK (col IS NOT NULL)` constraint and suppresses if found. Recommend three-step: add CHECK NOT VALID, validate, then SET NOT NULL. |
 | `SA018` | warn | hybrid | `ADD PRIMARY KEY` without pre-existing index | Static: fires on `ADD PRIMARY KEY` without `USING INDEX` clause (`ALTER TABLE` takes `AccessExclusiveLock`, and the implicit index creation extends lock duration). Connected: checks catalog for pre-existing unique index on the PK columns and suppresses if found. Safe pattern: create index concurrently first, then `ADD CONSTRAINT ... USING INDEX`. |
 | `SA019` | warn | static | `REINDEX` without `CONCURRENTLY` | Takes `AccessExclusiveLock`. PG 12+ supports `REINDEX CONCURRENTLY`. |
@@ -413,7 +413,7 @@ Known unsafe casts that require a rewrite (commonly assumed safe but are not):
 - `int` to `bigint` — different binary representation, always rewrites
 - `timestamp` to `timestamptz` — rewrite required
 
-All other type changes are flagged. When a `USING` clause is present, PostgreSQL rewrites the table to evaluate the expression, even when the source and target types are binary-compatible. In the absence of a database connection, the rule is conservative and flags all type changes not in the allowlist. With a connection, the rule can consult `pg_cast` to determine if the cast is binary-coercible.
+All other type changes are flagged. When a `USING` clause is present, SA003 ALWAYS fires regardless of whether the cast is in the safe allowlist — PostgreSQL rewrites the table to evaluate the expression, even when the source and target types are binary-compatible. The allowlist only applies to `ALTER COLUMN TYPE` without a `USING` clause. In the absence of a database connection, the rule is conservative and flags all type changes not in the allowlist. With a connection, the rule can consult `pg_cast` to determine if the cast is binary-coercible.
 
 **OPEN:** Build a comprehensive safe-cast list by auditing `pg_cast.castmethod` across PG 14-18. The allowlist above is a starting point.
 
@@ -716,7 +716,7 @@ Depth beats breadth. Sqitch's multi-DB support is one reason it can't do PG-spec
 
 We use the existing Sqitch tables (`sqitch.changes`, etc.) rather than our own schema. Reason: zero migration cost for existing Sqitch users. A team can `alias sqitch=stitch` and evaluate us before committing. This is the adoption path.
 
-**`stitch.*` schema:** When stitch-specific features are used (expand/contract, batched DML), a separate `stitch.*` schema is created. This schema is created only on first use of these features — never during basic deploy/revert/verify operations. The `stitch.*` schema is independent of `sqitch.*` and can be safely dropped if reverting to Sqitch (advanced features will stop working, but core migration tracking is unaffected).
+**`stitch.*` schema:** When stitch-specific features are used, a separate `stitch.*` schema is created. This includes non-transactional deploy (which uses `stitch.pending_changes` for write-ahead tracking), expand/contract, and batched DML. The schema is created on first use of any of these features — for example, on the first deploy that includes a non-transactional change. The `stitch.*` schema is independent of `sqitch.*` and can be safely dropped if reverting to Sqitch (advanced features will stop working, but core migration tracking is unaffected).
 
 ### DD4 — SQL parser
 
@@ -947,13 +947,15 @@ stitch deploy
           → execute deploy script
           → update sqitch.changes, sqitch.events, sqitch.dependencies
           → COMMIT
-  → release advisory lock: pg_advisory_unlock(<lock_key>)
+  → release advisory lock: pg_advisory_unlock(<lock_key>)  [always — success, failure, or analysis abort]
   → print summary
 ```
 
+**Advisory lock release:** `pg_advisory_unlock()` must be called on ALL exit paths — successful completion, deploy failure (analysis block, script error, verification failure), and user abort. Disconnect-based release (PG automatically releases session-level advisory locks on disconnect) is the safety net for crashes, not the primary unlock mechanism. Implementations must use a `finally`-style pattern to ensure the unlock call is always reached.
+
 **Non-transactional changes:** stitch marks non-transactional changes via a plan file pragma added by `stitch add --no-transaction`. Additionally, stitch recognizes a `-- stitch:no-transaction` comment on the first line of the deploy script as a stitch-only convention. **Note:** Sqitch does NOT have a `-- sqitch-no-transaction` convention — no evidence of this mechanism exists in the Sqitch source code. Sqitch always wraps changes in `begin_work`/`finish_work`. The script comment convention is a stitch-only innovation for standalone linter mode (SA020 detection) and should not be described as Sqitch-compatible. During deploy, non-transactional changes execute without `BEGIN`/`COMMIT` wrapping. A separate configurable `statement_timeout` applies to non-transactional DDL (default: 4 hours, configurable via `stitch.toml` `[deploy] non_transactional_statement_timeout`).
 
-**Non-transactional write-ahead tracking:** Before executing non-transactional DDL, stitch writes a "pending" record to `stitch.pending_changes` (in its own committed transaction). After the DDL succeeds, the record is updated to "complete" and the sqitch tracking tables are updated. On the next deploy, stitch checks for any "pending" non-transactional changes and verifies their state before deciding to skip or retry. This handles the case where stitch crashes between DDL execution and tracking table update.
+**Non-transactional write-ahead tracking:** Before executing non-transactional DDL, stitch writes a "pending" record to `stitch.pending_changes` (in its own committed transaction). After the DDL succeeds, the record is updated to "complete" and the sqitch tracking tables are updated. On the next deploy, stitch checks for any "pending" non-transactional changes and verifies their state before deciding to skip or retry. This handles the case where stitch crashes between DDL execution and tracking table update. **Note:** `stitch.pending_changes` reads and writes are protected by the same session-level deploy advisory lock (DD13). The advisory lock prevents concurrent deploys from simultaneously reading or acting on pending records — without it, two processes could both attempt to verify and resolve the same pending change.
 
 **`stitch.pending_changes` schema:**
 ```sql

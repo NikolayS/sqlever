@@ -4,6 +4,35 @@ All notable changes to the stitch spec and codebase will be documented here.
 
 ## [Unreleased]
 
+## [SPEC 0.6] — 2026-03-20
+
+Round 4 expert review findings addressed (convergence check). Same four reviewers. Surgical fixes — the spec is nearly converged. All reviewers confirmed zero critical behavioral issues with PG claims, no contradictions, and all OPEN markers remain appropriate.
+
+### Critical fixes
+
+- **Change ID `parent` line corrected:** The `parent` line in the change ID info string applies to ALL changes that have a preceding change in the plan file, not just reworked changes. Every change except the first has a parent (the immediately preceding change). The v0.5 spec incorrectly stated "only if this is a reworked change" — this would have produced incorrect change IDs for every change after the first in any plan with 2+ changes.
+
+- **`dependencies.change_id` FK: added `ON DELETE CASCADE`:** Without this, reverting a change (which deletes from `sqitch.changes`) fails with a foreign key violation on the dependencies table.
+
+### Important fixes
+
+- **`dependencies.dependency_id` FK added:** The `dependency_id` column now has `REFERENCES sqitch.changes(change_id) ON UPDATE CASCADE`, matching Sqitch's actual DDL. Without this, a `require` dependency could reference a non-existent change ID. The CHECK constraint is now named `dependencies_check`.
+
+- **Tag info string `@` prefix clarified:** Tag `format_name` prepends `@` to the tag name. The info string line is `tag @v1.0`, not `tag v1.0`. Incorrect tag IDs would result from omitting the prefix.
+
+- **SA016 lock level corrected (again):** `ADD CHECK` takes `ShareLock` on PG < 16, NOT `AccessExclusiveLock`. The v0.5 spec overcorrected from v0.4. `ShareLock` still blocks writes, so the rule recommendation (use `NOT VALID`) and severity (`error`) remain correct.
+
+- **Advisory lock unlock on all exit paths:** Added explicit note that `pg_advisory_unlock` must be called on ALL exit paths (success, failure, analysis abort), not just the happy path. Disconnect-based release is the safety net for crashes, not the primary unlock mechanism.
+
+- **`stitch.pending_changes` protected by deploy advisory lock:** Added explicit note linking the session-level advisory lock to `stitch.pending_changes` — the lock prevents concurrent access to pending records.
+
+### Minor fixes
+
+- SA003: clarified that `USING` clause presence always triggers SA003 regardless of the safe cast allowlist
+- SA001: confirmed it does NOT fire when a `DEFAULT` is present (that case is SA002/SA002b territory)
+- `stitch.*` schema creation: clarified that the `stitch` schema is created on first non-transactional deploy (not just expand/contract and batched DML)
+- Version bumped to 0.6
+
 ## [SPEC 0.5] — 2026-03-20
 
 Round 3 expert review findings addressed. Same four reviewers: PG internals expert, Sqitch power user, production SRE, static analysis engineer. Additional research: pg_index_pilot architecture analysis. Focus on correcting ID algorithms verified against Sqitch source, fixing tracking schema to match actual Sqitch DDL, and resolving advisory lock API mismatch.
