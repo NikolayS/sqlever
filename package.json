@@ -1,13 +1,13 @@
 {
-  "name": "stitch",
+  "name": "sqevo",
   "version": "0.1.0",
   "description": "Sqitch-compatible PostgreSQL migration tool",
   "type": "module",
   "bin": {
-    "stitch": "./src/cli.ts"
+    "sqevo": "./src/cli.ts"
   },
   "scripts": {
-    "build": "bun build src/cli.ts --compile --outfile dist/stitch",
+    "build": "bun build src/cli.ts --compile --outfile dist/sqevo",
     "test": "bun test"
   },
   "devDependencies": {

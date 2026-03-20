@@ -1,22 +1,22 @@
 #!/usr/bin/env bun
-// stitch — Sqitch-compatible PostgreSQL migration tool
+// sqevo — Sqitch-compatible PostgreSQL migration tool
 
 const [, , cmd, ...args] = process.argv;
 
 const commands: Record<string, () => void> = {
-  add: () => console.error("stitch add: not yet implemented"),
-  deploy: () => console.error("stitch deploy: not yet implemented"),
-  revert: () => console.error("stitch revert: not yet implemented"),
-  verify: () => console.error("stitch verify: not yet implemented"),
-  status: () => console.error("stitch status: not yet implemented"),
-  log: () => console.error("stitch log: not yet implemented"),
+  add: () => console.error("sqevo add: not yet implemented"),
+  deploy: () => console.error("sqevo deploy: not yet implemented"),
+  revert: () => console.error("sqevo revert: not yet implemented"),
+  verify: () => console.error("sqevo verify: not yet implemented"),
+  status: () => console.error("sqevo status: not yet implemented"),
+  log: () => console.error("sqevo log: not yet implemented"),
 };
 
 if (!cmd || cmd === "--help" || cmd === "-h") {
-  console.log(`stitch — Sqitch-compatible PostgreSQL migration tool
+  console.log(`sqevo — Sqitch-compatible PostgreSQL migration tool
 
 Usage:
-  stitch <command> [options]
+  sqevo <command> [options]
 
 Commands:
   add       Add a new migration
@@ -34,7 +34,7 @@ https://github.com/NikolayS/stitch
 
 const handler = commands[cmd];
 if (!handler) {
-  console.error(`stitch: unknown command '${cmd}'`);
+  console.error(`sqevo: unknown command '${cmd}'`);
   process.exit(1);
 }
 

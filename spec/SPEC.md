@@ -1,6 +1,6 @@
-# stitch — Product Specification
+# sqevo — Product Specification
 
-- **Version:** 0.7.1 (draft)
+- **Version:** 0.8 (draft)
 - **Status:** Pre-development — spec review in progress, no implementation yet
 - **License:** Apache 2.0
 - **Changelog:** [SPEC-CHANGELOG.md](SPEC-CHANGELOG.md)
@@ -58,7 +58,7 @@ https://github.com/pgq/pgq — 3-partition rotating queue table, entirely inside
 
 ### pg_index_pilot
 
-https://gitlab.com/postgres-ai/postgresai/-/tree/main/components/index_pilot — pure PL/pgSQL tool for managing `REINDEX INDEX CONCURRENTLY` operations. Key design patterns relevant to stitch: (1) write-ahead tracking with three-state lifecycle (`in_progress` → `completed` | `failed`) for crash recovery of non-transactional DDL, (2) advisory lock coordination using schema OID and `pg_try_advisory_lock()` to prevent concurrent operations, (3) invalid index cleanup by checking `pg_index.indisvalid` and dropping `_ccnew` suffixed indexes left by failed `REINDEX CONCURRENTLY`, (4) explicit pre-DDL commit to release held locks before executing concurrent DDL. These patterns informed stitch's non-transactional write-ahead tracking and `stitch.pending_changes` design.
+https://gitlab.com/postgres-ai/postgresai/-/tree/main/components/index_pilot — pure PL/pgSQL tool for managing `REINDEX INDEX CONCURRENTLY` operations. Key design patterns relevant to sqevo: (1) write-ahead tracking with three-state lifecycle (`in_progress` → `completed` | `failed`) for crash recovery of non-transactional DDL, (2) advisory lock coordination using schema OID and `pg_try_advisory_lock()` to prevent concurrent operations, (3) invalid index cleanup by checking `pg_index.indisvalid` and dropping `_ccnew` suffixed indexes left by failed `REINDEX CONCURRENTLY`, (4) explicit pre-DDL commit to release held locks before executing concurrent DDL. These patterns informed sqevo's non-transactional write-ahead tracking and `sqevo.pending_changes` design.
 
 ### Flyway / Liquibase
 
@@ -100,13 +100,13 @@ In the agentic development era, engineers increasingly have AI assistants writin
 
 ### Goals
 
-- Drop-in CLI replacement for Sqitch — alias `sqitch` → `stitch` and nothing breaks
+- Drop-in CLI replacement for Sqitch — alias `sqitch` → `sqevo` and nothing breaks
 - PostgreSQL-only — depth over breadth, know the target platform deeply
 - Single compiled binary — `bun build --compile`, no runtime deps, <50ms startup
 - Static analysis as a first-class citizen — dangerous patterns caught before deploy, not after
 - All advanced features are opt-in — v1.0 is safe to adopt without understanding expand/contract or batching
 - AI-native — structured output, machine-readable risk reports, CI integration
-- Composable — each major feature usable independently, without adopting the full tool. Teams using Flyway, Alembic, Rails migrations, or raw psql scripts should be able to run `stitch analyze` as a standalone linter in their CI pipeline without touching their migration runner. The batched DML worker should be invokable standalone. No forced adoption of the whole stack.
+- Composable — each major feature usable independently, without adopting the full tool. Teams using Flyway, Alembic, Rails migrations, or raw psql scripts should be able to run `sqevo analyze` as a standalone linter in their CI pipeline without touching their migration runner. The batched DML worker should be invokable standalone. No forced adoption of the whole stack.
 
 ### Non-goals
 
@@ -126,31 +126,31 @@ All Sqitch commands must be supported with identical flags and semantics:
 
 | Command | Description |
 |---------|-------------|
-| `stitch init [project]` | Initialize project, create `sqitch.conf` and `sqitch.plan` |
-| `stitch add <name> [-n note] [-r dep] [--conflict dep]` | Add new change (supports `--no-transaction` pragma) |
-| `stitch deploy [target] [--to change] [--mode [all\|change\|tag]]` | Deploy changes |
-| `stitch revert [target] [--to change] [-y]` | Revert changes |
-| `stitch verify [target] [--from change] [--to change]` | Run verify scripts |
-| `stitch status [target]` | Show deployment status |
-| `stitch log [target]` | Show deployment history |
-| `stitch tag [name]` | Tag current deployment state |
-| `stitch rework <name>` | Rework an existing change (create new version with same name) |
-| `stitch rebase [--onto change]` | Revert then re-deploy (convenience for `revert` + `deploy`) |
-| `stitch bundle [--dest-dir dir]` | Package project for distribution |
-| `stitch checkout <branch>` | Deploy/revert changes to match a VCS branch |
-| `stitch show <type> <name>` | Display change/tag details or script contents |
-| `stitch plan [filter]` | Display plan contents in human-readable format |
-| `stitch upgrade` | Upgrade the Sqitch registry schema to current version |
-| `stitch engine add\|alter\|remove\|show\|list` | Manage database engines |
-| `stitch target add\|alter\|remove\|show\|list` | Manage deploy targets |
-| `stitch config` | Read/write configuration |
-| `stitch help [command]` | Show help |
+| `sqevo init [project]` | Initialize project, create `sqitch.conf` and `sqitch.plan` |
+| `sqevo add <name> [-n note] [-r dep] [--conflict dep]` | Add new change (supports `--no-transaction` pragma) |
+| `sqevo deploy [target] [--to change] [--mode [all\|change\|tag]]` | Deploy changes |
+| `sqevo revert [target] [--to change] [-y]` | Revert changes |
+| `sqevo verify [target] [--from change] [--to change]` | Run verify scripts |
+| `sqevo status [target]` | Show deployment status |
+| `sqevo log [target]` | Show deployment history |
+| `sqevo tag [name]` | Tag current deployment state |
+| `sqevo rework <name>` | Rework an existing change (create new version with same name) |
+| `sqevo rebase [--onto change]` | Revert then re-deploy (convenience for `revert` + `deploy`) |
+| `sqevo bundle [--dest-dir dir]` | Package project for distribution |
+| `sqevo checkout <branch>` | Deploy/revert changes to match a VCS branch |
+| `sqevo show <type> <name>` | Display change/tag details or script contents |
+| `sqevo plan [filter]` | Display plan contents in human-readable format |
+| `sqevo upgrade` | Upgrade the Sqitch registry schema to current version |
+| `sqevo engine add\|alter\|remove\|show\|list` | Manage database engines |
+| `sqevo target add\|alter\|remove\|show\|list` | Manage deploy targets |
+| `sqevo config` | Read/write configuration |
+| `sqevo help [command]` | Show help |
 
 Flags that must be supported: `--db-uri`, `--db-client`, `--plan-file`, `--top-dir`, `--registry`, `--quiet`, `--verbose`, `--target`, `--set` / `-s` (template variables), `--log-only`, `--no-verify`, `--verify`, `--no-prompt` / `-y`.
 
 **`--set` / `-s`:** Template variable substitution. Sqitch supports passing variables at deploy time that are substituted in scripts via psql's `:variable` syntax. Commonly used for environment-specific schema names, roles, or tablespaces.
 
-**`--log-only`:** Record a change as deployed without executing the script. Critical for adopting stitch on databases where changes were already applied manually or by another tool.
+**`--log-only`:** Record a change as deployed without executing the script. Critical for adopting sqevo on databases where changes were already applied manually or by another tool.
 
 **`--registry`:** Specifies the schema name for tracking tables (default: `sqitch`). Some teams use non-default registry schemas (e.g., `_sqitch` or `migrations`).
 
@@ -180,7 +180,7 @@ add_users 2024-01-01T00:00:00Z user <user@example.com> # add users table
 add_users [add_users@v1.0] 2024-02-01T00:00:00Z user <user@example.com> # rework users
 ```
 
-**Cross-project dependencies:** Dependencies may reference changes in other projects using `project:change` syntax. At deploy time, stitch checks the tracking tables for the other project's changes.
+**Cross-project dependencies:** Dependencies may reference changes in other projects using `project:change` syntax. At deploy time, sqevo checks the tracking tables for the other project's changes.
 
 **Change ID computation:** Each change has a unique change ID. Sqitch computes this as a SHA-1 hash using an object format (from `App::Sqitch::Plan::Change->info` and `->id`). The input to SHA-1 is:
 
@@ -207,7 +207,7 @@ conflicts                            ← conditional: only if change has conflic
 
 Key differences from earlier spec versions: (1) `uri` line is conditional on the project having a `%uri` pragma, (2) `parent` line appears for ANY change that has a preceding change in the plan (not just reworked changes — every change except the first has a parent), (3) requires and conflicts use section headers with indented entries (not `require <dep>` per line), (4) note is raw text after a blank line separator (not `note <text>`), (5) the blank line and note are only present when the note is non-empty. Requires and conflicts entries preserve declaration order (not sorted).
 
-stitch must compute identical IDs. Since `change_id` is the primary key in `sqitch.changes`, any divergence will break the mid-deploy handoff scenario.
+sqevo must compute identical IDs. Since `change_id` is the primary key in `sqitch.changes`, any divergence will break the mid-deploy handoff scenario.
 
 **Tag ID computation:** Each tag also has a SHA-1 ID (stored as `tag_id` in `sqitch.tags`). The format is:
 
@@ -231,7 +231,7 @@ Like change IDs, the `uri` line is conditional, and the note appears as raw text
 
 ### R3 — Tracking schema compatibility
 
-Sqitch tracking tables must be used as-is. Teams currently using Sqitch must be able to switch to stitch mid-project without re-deploying all migrations. The tracking schema includes the following tables:
+Sqitch tracking tables must be used as-is. Teams currently using Sqitch must be able to switch to sqevo mid-project without re-deploying all migrations. The tracking schema includes the following tables:
 
 **`sqitch.projects`:**
 ```sql
@@ -256,7 +256,7 @@ CREATE TABLE sqitch.releases (
 );
 ```
 
-Note: The `releases` table tracks registry schema versions and is used by `stitch upgrade` to determine if the tracking schema needs migration.
+Note: The `releases` table tracks registry schema versions and is used by `sqevo upgrade` to determine if the tracking schema needs migration.
 
 **`sqitch.changes`:**
 ```sql
@@ -329,15 +329,15 @@ CREATE TABLE sqitch.events (
 );
 ```
 
-**`script_hash` computation:** Sqitch computes `script_hash` as a plain SHA-1 hash of the raw file content: `SHA-1(<raw_file_bytes>)`. There is NO git-style `"blob <size>\0"` prefix — Sqitch reads the file in raw binary mode and feeds it directly to SHA-1 (see `App::Sqitch::Plan::Change->_deploy_hash`). stitch must compute identical hashes. If stitch adds a `"blob <size>\0"` prefix, `stitch status` will falsely report every script as "modified" compared to what Sqitch recorded.
+**`script_hash` computation:** Sqitch computes `script_hash` as a plain SHA-1 hash of the raw file content: `SHA-1(<raw_file_bytes>)`. There is NO git-style `"blob <size>\0"` prefix — Sqitch reads the file in raw binary mode and feeds it directly to SHA-1 (see `App::Sqitch::Plan::Change->_deploy_hash`). sqevo must compute identical hashes. If sqevo adds a `"blob <size>\0"` prefix, `sqevo status` will falsely report every script as "modified" compared to what Sqitch recorded.
 
 The hash is computed from the raw file bytes (no line-ending normalization). For snapshot includes, the hash is computed from the deploy script file itself, not the assembled content after `\i` resolution. For reworked changes, the hash reflects the file content at the time of deployment — the current file on disk at deploy time, not the file as it existed when the change was first added to the plan.
 
-**Registry schema creation:** When stitch first deploys to a database, it must create the `sqitch` schema and all tracking tables using DDL identical to what Sqitch produces. The creation should use `CREATE SCHEMA IF NOT EXISTS` and `CREATE TABLE IF NOT EXISTS` for idempotent first-deploy, and should be protected by an advisory lock to handle concurrent first-deploys from multiple CI runners.
+**Registry schema creation:** When sqevo first deploys to a database, it must create the `sqitch` schema and all tracking tables using DDL identical to what Sqitch produces. The creation should use `CREATE SCHEMA IF NOT EXISTS` and `CREATE TABLE IF NOT EXISTS` for idempotent first-deploy, and should be protected by an advisory lock to handle concurrent first-deploys from multiple CI runners.
 
 ### R4 — Static analysis on deploy
 
-`stitch deploy` must run static analysis before executing any SQL. On `error`-severity findings, deploy must be blocked (unless `--force` is passed). On `warn`, deploy proceeds with output. `--force-rule SA003` bypasses a specific rule while keeping all other guards active (can be specified multiple times). `--force` remains as the blanket "bypass everything" escape hatch.
+`sqevo deploy` must run static analysis before executing any SQL. On `error`-severity findings, deploy must be blocked (unless `--force` is passed). On `warn`, deploy proceeds with output. `--force-rule SA003` bypasses a specific rule while keeping all other guards active (can be specified multiple times). `--force` remains as the blanket "bypass everything" escape hatch.
 
 ### R5 — Machine-readable output
 
@@ -349,7 +349,7 @@ All commands must support `--format json` for structured output. Risk reports mu
 |------|---------|
 | 0 | Success |
 | 1 | Deploy failed |
-| 2 | Analysis blocked deploy (also used by standalone `stitch analyze` when error-level findings exist) |
+| 2 | Analysis blocked deploy (also used by standalone `sqevo analyze` when error-level findings exist) |
 | 3 | Verification failed |
 | 4 | Concurrent deploy detected (another deploy is in progress) |
 | 5 | Lock timeout exceeded (retry may succeed) |
@@ -371,7 +371,7 @@ Analyze migration SQL before deploy and flag dangerous patterns. Moved from v1.1
 - `info` — informational
 
 **Rule classification:**
-- **Static rules** — can run on SQL alone, no database connection needed. These work in standalone linter mode (`stitch analyze file.sql`).
+- **Static rules** — can run on SQL alone, no database connection needed. These work in standalone linter mode (`sqevo analyze file.sql`).
 - **Connected rules** — require a database connection for schema introspection (e.g., checking indexes, row counts). When no connection is available, connected rules are silently skipped with an `info`-level note.
 - **Hybrid rules** — have both a static check (always runs) and a connected check (runs when a database connection is available). In standalone mode, only the static portion fires. With a connection, the connected portion may refine, suppress, or add to the static findings.
 
@@ -399,7 +399,7 @@ Analyze migration SQL before deploy and flag dangerous patterns. Moved from v1.1
 | `SA017` | error | hybrid | `ALTER COLUMN ... SET NOT NULL` (existing column) | Static: fires on any `SET NOT NULL` (on PG < 12, full table scan under `AccessExclusiveLock`; on PG 12+, metadata-only if a valid CHECK constraint exists). Connected: checks catalog for existing valid `CHECK (col IS NOT NULL)` constraint and suppresses if found. Recommend three-step: add CHECK NOT VALID, validate, then SET NOT NULL. |
 | `SA018` | warn | hybrid | `ADD PRIMARY KEY` without pre-existing index | Static: fires on `ADD PRIMARY KEY` without `USING INDEX` clause (`ALTER TABLE` takes `AccessExclusiveLock`, and the implicit index creation extends lock duration). Connected: checks catalog for pre-existing unique index on the PK columns and suppresses if found. Safe pattern: create index concurrently first, then `ADD CONSTRAINT ... USING INDEX`. |
 | `SA019` | warn | static | `REINDEX` without `CONCURRENTLY` | Takes `AccessExclusiveLock`. PG 12+ supports `REINDEX CONCURRENTLY`. |
-| `SA020` | error | static | `CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, or `REINDEX CONCURRENTLY` inside transactional deploy | Cannot run inside a transaction block — will fail at runtime. Change must be marked non-transactional. In project mode: checks plan file for non-transactional marker. In standalone mode: warns on any `CONCURRENTLY` usage with message "Ensure this runs outside a transaction block." Also recognizes `-- stitch:no-transaction` script comment (stitch-only convention, see non-transactional changes below). |
+| `SA020` | error | static | `CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, or `REINDEX CONCURRENTLY` inside transactional deploy | Cannot run inside a transaction block — will fail at runtime. Change must be marked non-transactional. In project mode: checks plan file for non-transactional marker. In standalone mode: warns on any `CONCURRENTLY` usage with message "Ensure this runs outside a transaction block." Also recognizes `-- sqevo:no-transaction` script comment (sqevo-only convention, see non-transactional changes below). |
 | `SA021` | warn | static | `LOCK TABLE` (any mode) | Explicit locking in migrations is a code smell and dangerous in production. |
 
 **SA003 safe cast allowlist:** The following type changes are known to be safe (no table rewrite, binary-compatible):
@@ -422,26 +422,26 @@ All other type changes are flagged. When a `USING` clause is present, SA003 ALWA
 
 **Inline suppression:** Rules can be suppressed per-statement using SQL comments:
 ```sql
--- stitch:disable SA010
+-- sqevo:disable SA010
 UPDATE users SET tier = 'free';
--- stitch:enable SA010
+-- sqevo:enable SA010
 ```
-Or single-line: `UPDATE users SET tier = 'free'; -- stitch:disable SA010`
+Or single-line: `UPDATE users SET tier = 'free'; -- sqevo:disable SA010`
 
 **Inline suppression scoping rules:**
-- **Block form:** `-- stitch:disable` ... `-- stitch:enable` suppresses findings for all statements between the markers. An unclosed block (no matching `enable`) extends to end of file and produces a warning.
-- **Single-line form:** A trailing `-- stitch:disable` comment attaches to the immediately preceding statement (determined by source range from the parser).
-- **Multiple rules:** Comma-separated rule IDs are supported: `-- stitch:disable SA010,SA011`.
-- **Unknown rules:** `-- stitch:disable SA999` (nonexistent rule) produces a warning, not a silent ignore.
-- **`all` keyword:** `-- stitch:disable all` is NOT supported — suppressing all rules silently is too dangerous. Suppress rules individually.
+- **Block form:** `-- sqevo:disable` ... `-- sqevo:enable` suppresses findings for all statements between the markers. An unclosed block (no matching `enable`) extends to end of file and produces a warning.
+- **Single-line form:** A trailing `-- sqevo:disable` comment attaches to the immediately preceding statement (determined by source range from the parser).
+- **Multiple rules:** Comma-separated rule IDs are supported: `-- sqevo:disable SA010,SA011`.
+- **Unknown rules:** `-- sqevo:disable SA999` (nonexistent rule) produces a warning, not a silent ignore.
+- **`all` keyword:** `-- sqevo:disable all` is NOT supported — suppressing all rules silently is too dangerous. Suppress rules individually.
 
-**Per-file overrides in `stitch.toml`:**
+**Per-file overrides in `sqevo.toml`:**
 ```toml
 [analysis.overrides."deploy/backfill_tiers.sql"]
 skip = ["SA010"]
 ```
 
-**Configuration via `stitch.toml`:**
+**Configuration via `sqevo.toml`:**
 ```toml
 [analysis]
 error_on_warn = false
@@ -479,34 +479,34 @@ interface Finding {
 
 Note: `libpg_query` provides byte offsets that must be converted to line/column using the original source text. This conversion is part of `analysis/parser.ts`.
 
-**Hybrid rule convention:** Hybrid rules implement a single `check()` method and internally branch on `context.db !== undefined`. When `db` is present, the connected portion may refine, suppress, or add to the static findings. A hybrid rule may produce multiple findings from one statement (e.g., SA009 can produce both a "missing NOT VALID" finding and a "missing index" finding). Suppression filtering (inline `-- stitch:disable` and per-file overrides) happens in the analyzer entry point after rules return findings — rules do not see or reason about suppressions.
+**Hybrid rule convention:** Hybrid rules implement a single `check()` method and internally branch on `context.db !== undefined`. When `db` is present, the connected portion may refine, suppress, or add to the static findings. A hybrid rule may produce multiple findings from one statement (e.g., SA009 can produce both a "missing NOT VALID" finding and a "missing index" finding). Suppression filtering (inline `-- sqevo:disable` and per-file overrides) happens in the analyzer entry point after rules return findings — rules do not see or reason about suppressions.
 
-**Unused suppression warnings:** If a `-- stitch:disable SA010` comment matches no actual finding in its scope, the analyzer emits a warning: "Unused suppression for SA010." This prevents dead suppression comments from accumulating.
+**Unused suppression warnings:** If a `-- sqevo:disable SA010` comment matches no actual finding in its scope, the analyzer emits a warning: "Unused suppression for SA010." This prevents dead suppression comments from accumulating.
 
-**`stitch analyze` scope:**
-- `stitch analyze <file>` — analyze a single SQL file (standalone linter mode, no `sqitch.plan` required).
-- `stitch analyze <directory>` — analyze all `.sql` files in the directory.
-- `stitch analyze` (no args, in sqitch project) — analyze all pending (undeployed) migrations from `sqitch.plan`.
-- `stitch analyze --all` — analyze all migrations in the project.
-- `stitch analyze --changed` — analyze only files changed in the current git diff (useful in CI for PRs).
+**`sqevo analyze` scope:**
+- `sqevo analyze <file>` — analyze a single SQL file (standalone linter mode, no `sqitch.plan` required).
+- `sqevo analyze <directory>` — analyze all `.sql` files in the directory.
+- `sqevo analyze` (no args, in sqitch project) — analyze all pending (undeployed) migrations from `sqitch.plan`.
+- `sqevo analyze --all` — analyze all migrations in the project.
+- `sqevo analyze --changed` — analyze only files changed in the current git diff (useful in CI for PRs).
 
-When no `sqitch.plan` exists and no arguments are given, analyze all `.sql` files in the current directory. This supports the composability goal — teams using other migration tools can run `stitch analyze` as a standalone linter.
+When no `sqitch.plan` exists and no arguments are given, analyze all `.sql` files in the current directory. This supports the composability goal — teams using other migration tools can run `sqevo analyze` as a standalone linter.
 
 ### 5.2 Snapshot includes (v1.2)
 
 `\i` / `\ir` includes resolved from the git commit where the migration was added — not HEAD.
 
 ```
-stitch deploy               # uses historically-correct included files
-stitch deploy --no-snapshot # falls back to HEAD (opt-out)
+sqevo deploy               # uses historically-correct included files
+sqevo deploy --no-snapshot # falls back to HEAD (opt-out)
 ```
 
 ### 5.3 TUI — interactive deployment dashboard (v1.3)
 
-When stdout is a TTY, stitch shows a live TUI during deploy:
+When stdout is a TTY, sqevo shows a live TUI during deploy:
 
 ```
-stitch deploy
+sqevo deploy
 ┌─ Deploying to production ──────────────────────────────┐
 │  [✓] 001_create_users          12ms                    │
 │  [✓] 002_create_orders         8ms                     │
@@ -530,27 +530,27 @@ First-class support for the expand/contract pattern.
 - Deploy application code that reads/writes both
 
 **Contract phase** (after full app rollout):
-- Verify all rows backfilled (stitch checks before proceeding)
+- Verify all rows backfilled (sqevo checks before proceeding)
 - Drop sync trigger
 - Drop old column or constraint
 
 **CLI:**
 ```bash
-stitch add rename_users_name --expand    # generates expand migration pair
-stitch deploy --phase expand
-stitch deploy --phase contract
-stitch status                            # shows expand/contract state
+sqevo add rename_users_name --expand    # generates expand migration pair
+sqevo deploy --phase expand
+sqevo deploy --phase contract
+sqevo status                            # shows expand/contract state
 ```
 
 Inspired by pgroll — but surgical (no full table recreation).
 
 **Trigger edge cases and mitigations:**
 
-1. **Infinite recursion:** Bidirectional sync triggers (old→new, new→old) can recurse infinitely. All generated sync triggers must include a recursion guard. The guard uses `pg_trigger_depth()` scoped to stitch triggers by checking the trigger name: `IF pg_trigger_depth() < 2 AND TG_NAME LIKE 'stitch_sync_%' THEN ... END IF`. This is preferred over the session variable approach (`SET LOCAL stitch.syncing = 'true'`) because `SET LOCAL` remains true for the entire transaction, which would suppress ALL subsequent trigger fires within the transaction — not just recursive ones. The `pg_trigger_depth()` approach correctly allows multiple stitch sync triggers on different tables to fire independently within the same transaction while still preventing recursion. All stitch-generated sync triggers must use the `stitch_sync_` name prefix.
+1. **Infinite recursion:** Bidirectional sync triggers (old→new, new→old) can recurse infinitely. All generated sync triggers must include a recursion guard. The guard uses `pg_trigger_depth()` scoped to sqevo triggers by checking the trigger name: `IF pg_trigger_depth() < 2 AND TG_NAME LIKE 'sqevo_sync_%' THEN ... END IF`. This is preferred over the session variable approach (`SET LOCAL sqevo.syncing = 'true'`) because `SET LOCAL` remains true for the entire transaction, which would suppress ALL subsequent trigger fires within the transaction — not just recursive ones. The `pg_trigger_depth()` approach correctly allows multiple sqevo sync triggers on different tables to fire independently within the same transaction while still preventing recursion. All sqevo-generated sync triggers must use the `sqevo_sync_` name prefix.
 
-2. **Logical replication:** Triggers do not fire on logical replication subscribers by default. If the target database is a subscriber, sync triggers will not fire, leaving columns out of sync. stitch should document this limitation. Using `ALTER TABLE ... ENABLE ALWAYS TRIGGER` is possible but risky (may cause loops). **OPEN:** Determine the recommended approach for logical replication environments.
+2. **Logical replication:** Triggers do not fire on logical replication subscribers by default. If the target database is a subscriber, sync triggers will not fire, leaving columns out of sync. sqevo should document this limitation. Using `ALTER TABLE ... ENABLE ALWAYS TRIGGER` is possible but risky (may cause loops). **OPEN:** Determine the recommended approach for logical replication environments.
 
-3. **Partitioned tables:** Since stitch targets PG 14+ (test matrix), trigger inheritance from the partitioned parent table is always available (PG 13+ feature). stitch installs sync triggers on the parent table; they automatically apply to all partitions. Backfills must be partition-aware (iterate per-partition for progress tracking and to avoid lock escalation).
+3. **Partitioned tables:** Since sqevo targets PG 14+ (test matrix), trigger inheritance from the partitioned parent table is always available (PG 13+ feature). sqevo installs sync triggers on the parent table; they automatically apply to all partitions. Backfills must be partition-aware (iterate per-partition for progress tracking and to avoid lock escalation).
 
 4. **COPY performance:** `BEFORE INSERT` triggers fire during `COPY`, which may significantly impact bulk load performance during the expand phase. Document this trade-off.
 
@@ -565,7 +565,7 @@ Queue-based large-table data migrations, entirely inside Postgres.
 **Queue architecture:**
 - 3-partition rotating table (PGQ-inspired from SkyTools)
 - No external dependencies (no Redis, no Kafka)
-- All job state visible in Postgres via querying `stitch.*` tables. `pg_stat_activity` shows the currently executing batch query and its duration/wait events, but job-level state (pending/running/done/failed) is in the queue tables.
+- All job state visible in Postgres via querying `sqevo.*` tables. `pg_stat_activity` shows the currently executing batch query and its duration/wait events, but job-level state (pending/running/done/failed) is in the queue tables.
 
 **Job lifecycle:**
 ```
@@ -577,19 +577,19 @@ pending → running → done
                               (manual retry) → running
 ```
 
-A `dead` job can be manually retried after the operator fixes the underlying issue. stitch tracks the last processed primary key so that retried jobs resume from where they stopped, not from the beginning.
+A `dead` job can be manually retried after the operator fixes the underlying issue. sqevo tracks the last processed primary key so that retried jobs resume from where they stopped, not from the beginning.
 
-**Worker heartbeat:** The batch queue table includes a `heartbeat_at` column updated at the start of each batch. A configurable staleness threshold (default: 5 minutes, configurable via `stitch.toml` `[batch] heartbeat_staleness`) determines when a worker is considered dead. On `stitch batch status` and at the start of any batch operation, stitch checks for running jobs with stale heartbeats and marks them as `failed` with an error message indicating the worker was unresponsive. This handles the case where a batch worker process dies silently (OOM kill, network partition) and leaves a job in `running` state indefinitely.
+**Worker heartbeat:** The batch queue table includes a `heartbeat_at` column updated at the start of each batch. A configurable staleness threshold (default: 5 minutes, configurable via `sqevo.toml` `[batch] heartbeat_staleness`) determines when a worker is considered dead. On `sqevo batch status` and at the start of any batch operation, sqevo checks for running jobs with stale heartbeats and marks them as `failed` with an error message indicating the worker was unresponsive. This handles the case where a batch worker process dies silently (OOM kill, network partition) and leaves a job in `running` state indefinitely.
 
 **CLI:**
 ```bash
-stitch batch add backfill_user_tier --table users --batch-size 500 --sleep 100ms
-stitch batch list
-stitch batch status backfill_user_tier
-stitch batch pause backfill_user_tier
-stitch batch resume backfill_user_tier
-stitch batch cancel backfill_user_tier
-stitch batch retry backfill_user_tier    # manual retry of dead job
+sqevo batch add backfill_user_tier --table users --batch-size 500 --sleep 100ms
+sqevo batch list
+sqevo batch status backfill_user_tier
+sqevo batch pause backfill_user_tier
+sqevo batch resume backfill_user_tier
+sqevo batch cancel backfill_user_tier
+sqevo batch retry backfill_user_tier    # manual retry of dead job
 ```
 
 **Features:**
@@ -597,7 +597,7 @@ stitch batch retry backfill_user_tier    # manual retry of dead job
 - Progress: rows done / rows remaining / ETA
 - Per-batch transaction — each batch commits independently
 - Replication lag monitoring: query `pg_stat_replication.replay_lag` and pause the batch job when lag exceeds a configurable threshold (default: 10s). Most production databases have replicas; unthrottled batched writes will cause replica lag incidents.
-- VACUUM pressure awareness: monitor `pg_stat_user_tables.n_dead_tup` and pause if dead tuple ratio exceeds a configurable percentage (default: 10%). The ratio is computed as `n_dead_tup / (n_live_tup + n_dead_tup)`. Using a ratio rather than an absolute count ensures the threshold is meaningful regardless of table size. Configurable via `stitch.toml` `[batch] max_dead_tuple_ratio`. Many small transactions create dead tuples; autovacuum may not keep up on hot tables.
+- VACUUM pressure awareness: monitor `pg_stat_user_tables.n_dead_tup` and pause if dead tuple ratio exceeds a configurable percentage (default: 10%). The ratio is computed as `n_dead_tup / (n_live_tup + n_dead_tup)`. Using a ratio rather than an absolute count ensures the threshold is meaningful regardless of table size. Configurable via `sqevo.toml` `[batch] max_dead_tuple_ratio`. Many small transactions create dead tuples; autovacuum may not keep up on hot tables.
 - Connection management: the batch worker requires a direct PostgreSQL connection (not through PgBouncer in transaction mode) because it uses session-level settings and the connection must persist across sleep intervals. SET statements (`lock_timeout`, `statement_timeout`, `search_path`) are re-issued at the start of each batch transaction as a safety measure.
 - Inspired by GitLab `BatchedMigration`: throttling, pause/resume, retry, state tracking in Postgres
   - https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/database/migration_helpers.rb
@@ -607,17 +607,17 @@ stitch batch retry backfill_user_tier    # manual retry of dead job
 
 ```bash
 # GitHub Actions
-stitch analyze --format github-annotations  # native GH annotation format
-stitch analyze --format json | jq .         # structured for any CI
+sqevo analyze --format github-annotations  # native GH annotation format
+sqevo analyze --format json | jq .         # structured for any CI
 
 # GitLab CI
-stitch analyze --format gitlab-codequality  # native GL code quality report
+sqevo analyze --format gitlab-codequality  # native GL code quality report
 
 # General
-stitch analyze --strict                     # exit non-zero on any finding (warnings treated as errors)
+sqevo analyze --strict                     # exit non-zero on any finding (warnings treated as errors)
 ```
 
-Note: `stitch analyze` returns exit code 2 when error-level findings exist (default behavior). The `--strict` flag additionally treats warnings as errors for exit code purposes. `--strict` is the CLI equivalent of `error_on_warn = true` in `stitch.toml` `[analysis]` config. This replaces the earlier `--exit-code` flag which was redundant with the default behavior.
+Note: `sqevo analyze` returns exit code 2 when error-level findings exist (default behavior). The `--strict` flag additionally treats warnings as errors for exit code purposes. `--strict` is the CLI equivalent of `error_on_warn = true` in `sqevo.toml` `[analysis]` config. This replaces the earlier `--exit-code` flag which was redundant with the default behavior.
 
 **Reporter format specifications:**
 
@@ -632,33 +632,33 @@ Note: `stitch analyze` returns exit code 2 when error-level findings exist (defa
   }
   ```
 - **`github-annotations`**: GitHub Actions workflow commands: `::error file={file},line={line},col={col}::{message}` and `::warning ...`. Appear inline in PR diffs.
-- **`gitlab-codequality`**: GitLab Code Quality JSON schema: `[{"description": "...", "check_name": "SA004", "fingerprint": "...", "severity": "major", "location": {"path": "...", "lines": {"begin": 5}}}]`. Severity mapping from stitch to GitLab Code Quality: `error` → `critical`, `warn` → `major`, `info` → `minor`. Fingerprint computation: SHA-1 of `(ruleId, filePath, line)` — this produces stable fingerprints for deduplication across CI runs.
+- **`gitlab-codequality`**: GitLab Code Quality JSON schema: `[{"description": "...", "check_name": "SA004", "fingerprint": "...", "severity": "major", "location": {"path": "...", "lines": {"begin": 5}}}]`. Severity mapping from sqevo to GitLab Code Quality: `error` → `critical`, `warn` → `major`, `info` → `minor`. Fingerprint computation: SHA-1 of `(ruleId, filePath, line)` — this produces stable fingerprints for deduplication across CI runs.
 
 **Example GitHub Actions step:**
 ```yaml
 - name: Analyze migrations
-  run: stitch analyze --format github-annotations
+  run: sqevo analyze --format github-annotations
 ```
 
 Annotations appear inline in PR diff — dangerous migration SQL highlighted at the line.
 
 ### 5.7 AI integration (v1.2+)
 
-**`stitch explain <migration>`** — plain-English summary of what a migration does and its risk profile, via LLM.
+**`sqevo explain <migration>`** — plain-English summary of what a migration does and its risk profile, via LLM.
 
-**`stitch review`** — structured risk report suitable for posting as a PR comment (Markdown output). Designed to be called by AI coding agents reviewing PRs.
+**`sqevo review`** — structured risk report suitable for posting as a PR comment (Markdown output). Designed to be called by AI coding agents reviewing PRs.
 
-**`stitch suggest-revert <migration>`** — LLM-assisted revert script generation when no revert was written.
+**`sqevo suggest-revert <migration>`** — LLM-assisted revert script generation when no revert was written.
 
-**`stitch chat`** — interactive mode: ask questions about the migration history, planned changes, risk.
+**`sqevo chat`** — interactive mode: ask questions about the migration history, planned changes, risk.
 
 ### 5.8 DBLab integration (v3.0)
 
 Test deploy + revert against a full-size production clone before touching prod.
 
 ```bash
-stitch deploy --dblab-url https://dblab.example.com --dblab-token $TOKEN
-# stitch provisions a clone, runs deploy+verify+revert, reports result
+sqevo deploy --dblab-url https://dblab.example.com --dblab-token $TOKEN
+# sqevo provisions a clone, runs deploy+verify+revert, reports result
 # No prod changes until clone test passes
 ```
 
@@ -668,20 +668,20 @@ The PostgresAI native advantage — no other migration tool can offer this.
 
 Moved from v1.1 to v1.0 — this is core safety infrastructure.
 
-Automatically prepend `SET lock_timeout = '5s'` before any DDL that could take a long lock, unless the migration already sets it. Configurable via `stitch.toml`. Can be disabled.
+Automatically prepend `SET lock_timeout = '5s'` before any DDL that could take a long lock, unless the migration already sets it. Configurable via `sqevo.toml`. Can be disabled.
 
-Detection: stitch scans the deploy script for any `SET lock_timeout` statement at the top level. If found, the auto-prepend is skipped for that script.
+Detection: sqevo scans the deploy script for any `SET lock_timeout` statement at the top level. If found, the auto-prepend is skipped for that script.
 
-**Timeout behavior on failure:** When `lock_timeout` fires, the statement fails and the transaction rolls back. stitch reports the error with actionable guidance: which lock was contended, suggestion to retry, and optionally identify the blocking query via `pg_stat_activity`.
+**Timeout behavior on failure:** When `lock_timeout` fires, the statement fails and the transaction rolls back. sqevo reports the error with actionable guidance: which lock was contended, suggestion to retry, and optionally identify the blocking query via `pg_stat_activity`.
 
-**Lock retry for CI:** `stitch deploy --lock-retries N` (default: 0, no retry) retries acquiring the lock up to N times with exponential backoff (starting at 1 second, doubling each retry, capped at 30 seconds). This is designed for CI pipelines where the operator is not present to manually re-trigger a deploy after a transient lock conflict. Configurable via `stitch.toml` `[deploy] lock_retries`.
+**Lock retry for CI:** `sqevo deploy --lock-retries N` (default: 0, no retry) retries acquiring the lock up to N times with exponential backoff (starting at 1 second, doubling each retry, capped at 30 seconds). This is designed for CI pipelines where the operator is not present to manually re-trigger a deploy after a transient lock conflict. Configurable via `sqevo.toml` `[deploy] lock_retries`.
 
 **Per-migration override:** Individual migrations can set their own `lock_timeout` (e.g., a `VALIDATE CONSTRAINT` that needs a longer timeout). The auto-prepend is suppressed when the script contains its own `SET lock_timeout`.
 
 ### 5.10 Dry-run mode
 
 ```bash
-stitch deploy --dry-run   # prints what would be deployed, runs analysis, exits
+sqevo deploy --dry-run   # prints what would be deployed, runs analysis, exits
 ```
 
 **What dry-run does:** Validates the plan, checks dependency order, runs static analysis, reports what changes would be deployed. Zero database modifications (verified in tests via table counts before/after).
@@ -691,8 +691,8 @@ stitch deploy --dry-run   # prints what would be deployed, runs analysis, exits
 ### 5.11 Migration diff
 
 ```bash
-stitch diff               # show schema diff between deployed and plan
-stitch diff --from tag_a --to tag_b
+sqevo diff               # show schema diff between deployed and plan
+sqevo diff --from tag_a --to tag_b
 ```
 
 ---
@@ -715,9 +715,9 @@ Depth beats breadth. Sqitch's multi-DB support is one reason it can't do PG-spec
 
 ### DD3 — Sqitch tracking schema compatibility
 
-We use the existing Sqitch tables (`sqitch.changes`, etc.) rather than our own schema. Reason: zero migration cost for existing Sqitch users. A team can `alias sqitch=stitch` and evaluate us before committing. This is the adoption path.
+We use the existing Sqitch tables (`sqitch.changes`, etc.) rather than our own schema. Reason: zero migration cost for existing Sqitch users. A team can `alias sqitch=sqevo` and evaluate us before committing. This is the adoption path.
 
-**`stitch.*` schema:** When stitch-specific features are used, a separate `stitch.*` schema is created. This includes non-transactional deploy (which uses `stitch.pending_changes` for write-ahead tracking), expand/contract, and batched DML. The schema is created on first use of any of these features — for example, on the first deploy that includes a non-transactional change. The `stitch.*` schema is independent of `sqitch.*` and can be safely dropped if reverting to Sqitch (advanced features will stop working, but core migration tracking is unaffected).
+**`sqevo.*` schema:** When sqevo-specific features are used, a separate `sqevo.*` schema is created. This includes non-transactional deploy (which uses `sqevo.pending_changes` for write-ahead tracking), expand/contract, and batched DML. The schema is created on first use of any of these features — for example, on the first deploy that includes a non-transactional change. The `sqevo.*` schema is independent of `sqitch.*` and can be safely dropped if reverting to Sqitch (advanced features will stop working, but core migration tracking is unaffected).
 
 ### DD4 — SQL parser
 
@@ -734,21 +734,21 @@ Decision: **`pgsql-parser`** (or equivalent). If AST is unavailable for some con
 
 ### DD5 — Plan file is source of truth
 
-stitch never modifies `sqitch.plan` without an explicit command. The plan file is append-only during `add`, never rewritten during deploy/revert.
+sqevo never modifies `sqitch.plan` without an explicit command. The plan file is append-only during `add`, never rewritten during deploy/revert.
 
 ### DD6 — No magic sequencing
 
-Like Sqitch, stitch uses explicit dependency declarations (`-r dep1 -r dep2`), not sequential numbers. Sequential numbers create false ordering assumptions and merge conflicts. Dependencies are explicit.
+Like Sqitch, sqevo uses explicit dependency declarations (`-r dep1 -r dep2`), not sequential numbers. Sequential numbers create false ordering assumptions and merge conflicts. Dependencies are explicit.
 
-**Conflict dependencies:** Sqitch supports `--conflict dep` (or `!dep` in the plan file), meaning "this change cannot be deployed if `dep` is currently deployed." Before deploying a change, stitch must check that all requires are deployed and no conflicts are deployed. If a conflict is deployed, deploy fails with an error.
+**Conflict dependencies:** Sqitch supports `--conflict dep` (or `!dep` in the plan file), meaning "this change cannot be deployed if `dep` is currently deployed." Before deploying a change, sqevo must check that all requires are deployed and no conflicts are deployed. If a conflict is deployed, deploy fails with an error.
 
 ### DD7 — Expand/contract is opt-in
 
-The expand/contract pattern requires application-side changes. stitch never automatically applies it. It provides the primitives and tracks state. Engineers choose when to use it.
+The expand/contract pattern requires application-side changes. sqevo never automatically applies it. It provides the primitives and tracks state. Engineers choose when to use it.
 
 ### DD8 — All state in Postgres
 
-No lock files, no local state files, no `.stitch/` directory with runtime state. Everything that matters (what's deployed, batch job state, expand/contract phase) lives in the database. This makes stitch safe to run from multiple machines (CI + developer laptop) without coordination.
+No lock files, no local state files, no `.sqevo/` directory with runtime state. Everything that matters (what's deployed, batch job state, expand/contract phase) lives in the database. This makes sqevo safe to run from multiple machines (CI + developer laptop) without coordination.
 
 ### DD9 — 3-partition queue with SKIP LOCKED
 
@@ -761,11 +761,11 @@ This is the PGQ architecture: partition rotation for cleanup, lock-free dequeue 
 
 ### DD10 — No hidden network calls
 
-stitch never calls external services without explicit configuration. No telemetry, no update checks, no LLM calls unless `stitch explain`/`stitch review` is explicitly invoked.
+sqevo never calls external services without explicit configuration. No telemetry, no update checks, no LLM calls unless `sqevo explain`/`sqevo review` is explicitly invoked.
 
 ### DD11 — Sqitch as the oracle for compatibility testing
 
-We run Sqitch and stitch side-by-side against identical databases and compare output, tracking table state, and exit codes. Sqitch is the ground truth. Any divergence is a bug in stitch.
+We run Sqitch and sqevo side-by-side against identical databases and compare output, tracking table state, and exit codes. Sqitch is the ground truth. Any divergence is a bug in sqevo.
 
 This means Sqitch must be installed in CI. It is available as a Docker image (`sqitch/sqitch`) and as a Perl cpan package. We use the Docker image to avoid Perl runtime management.
 
@@ -777,57 +777,57 @@ We maintain a corpus of real-world Sqitch projects as test fixtures (anonymized 
 
 Sqitch also sets `ON_ERROR_STOP=1` when invoking psql, which aborts on the first error. It disables `.psqlrc` via environment variables.
 
-**Decision: Shell out to psql.** Like Sqitch, stitch executes migration scripts by invoking `psql`. This guarantees 100% compatibility with all psql metacommands (`\i`, `\ir`, `\set`, `\copy`, `\if`/`\elif`/`\endif`, `\echo`, `\gset`, etc.) — no subset, no reimplementation, no compatibility gaps.
+**Decision: Shell out to psql.** Like Sqitch, sqevo executes migration scripts by invoking `psql`. This guarantees 100% compatibility with all psql metacommands (`\i`, `\ir`, `\set`, `\copy`, `\if`/`\elif`/`\endif`, `\echo`, `\gset`, etc.) — no subset, no reimplementation, no compatibility gaps.
 
 **Implications:**
 - psql must be installed on the deploy machine. The `--db-client` flag specifies the psql path (default: `psql` from `$PATH`).
-- stitch sets `ON_ERROR_STOP=1`, disables `.psqlrc` (via `PSQLRC=/dev/null` and `--no-psqlrc`), and passes `--single-transaction` or not depending on `--mode` and `--no-transaction`.
+- sqevo sets `ON_ERROR_STOP=1`, disables `.psqlrc` (via `PSQLRC=/dev/null` and `--no-psqlrc`), and passes `--single-transaction` or not depending on `--mode` and `--no-transaction`.
 - `--set key=value` is passed directly to psql as `-v key=value`, preserving full psql variable interpolation (`:variable`, `:'variable'`, `:{?variable}`).
-- Error handling: stitch parses psql's stderr for error messages and exit code for success/failure. Structured error extraction is best-effort — psql does not emit machine-readable errors.
-- `node-postgres` (`pg` package) is still used for tracking table operations (`sqitch.*`, `stitch.*`), advisory locks, schema introspection, and batch DML. It is NOT used for executing migration scripts.
+- Error handling: sqevo parses psql's stderr for error messages and exit code for success/failure. Structured error extraction is best-effort — psql does not emit machine-readable errors.
+- `node-postgres` (`pg` package) is still used for tracking table operations (`sqitch.*`, `sqevo.*`), advisory locks, schema introspection, and batch DML. It is NOT used for executing migration scripts.
 
-This cleanly separates concerns: psql runs user SQL (with full metacommand support), `pg` manages stitch's own database state.
+This cleanly separates concerns: psql runs user SQL (with full metacommand support), `pg` manages sqevo's own database state.
 
 **`--mode` transaction semantics (depends on DD12):**
 - `change` mode (default): each change in its own transaction.
 - `all` mode: see note below on Sqitch behavior.
 - `tag` mode: changes grouped by tag, each tag-group in a transaction.
 
-**Sqitch `--mode all` behavior (important):** Sqitch's `_deploy_all` does NOT use a single wrapping transaction. It uses per-change transactions with explicit revert on failure — if change N fails, Sqitch explicitly reverts changes N-1, N-2, etc. that were already committed. This means intermediate committed states are visible to other sessions between changes. stitch may choose to improve upon this by offering true single-transaction semantics for `--mode all` (where supported by the execution model), but must document the behavioral difference. When stitch uses single-transaction `--mode all`, failure rolls back atomically (no partial state visible); Sqitch's approach shows intermediate states and relies on explicit revert.
+**Sqitch `--mode all` behavior (important):** Sqitch's `_deploy_all` does NOT use a single wrapping transaction. It uses per-change transactions with explicit revert on failure — if change N fails, Sqitch explicitly reverts changes N-1, N-2, etc. that were already committed. This means intermediate committed states are visible to other sessions between changes. sqevo may choose to improve upon this by offering true single-transaction semantics for `--mode all` (where supported by the execution model), but must document the behavioral difference. When sqevo uses single-transaction `--mode all`, failure rolls back atomically (no partial state visible); Sqitch's approach shows intermediate states and relies on explicit revert.
 
-If using psql, Sqitch does NOT wrap deploy scripts in a transaction managed by Sqitch — it passes transaction control to psql and manages tracking separately. If using node-postgres, stitch manages `BEGIN`/`COMMIT` directly. The transaction boundary differs by mode.
+If using psql, Sqitch does NOT wrap deploy scripts in a transaction managed by Sqitch — it passes transaction control to psql and manages tracking separately. If using node-postgres, sqevo manages `BEGIN`/`COMMIT` directly. The transaction boundary differs by mode.
 
 ### DD13 — PgBouncer compatibility and advisory locks
 
-**The problem:** Most production PostgreSQL deployments use PgBouncer for connection pooling. PgBouncer in transaction mode has significant implications for stitch:
+**The problem:** Most production PostgreSQL deployments use PgBouncer for connection pooling. PgBouncer in transaction mode has significant implications for sqevo:
 
 - `pg_advisory_lock` (session-level) does not work through PgBouncer in transaction mode — the lock is tied to the backend connection, which PgBouncer may reassign between transactions.
 - `pg_advisory_xact_lock` (transaction-level) releases at transaction end — it cannot span the entire deploy in `--mode change` (each change is a separate transaction) or across non-transactional changes. This makes it unsuitable for deploy coordination.
 - Session-level `SET` commands (`lock_timeout`, `statement_timeout`, `search_path`) may leak to other connections or be lost between transactions.
 - The batch worker's sleep interval between batches causes the connection to return to the pool; the next batch may run on a different backend.
 
-**Decision:** stitch deploy, revert, rebase, checkout, and batch operations require direct PostgreSQL connections, not PgBouncer in transaction mode. stitch will:
+**Decision:** sqevo deploy, revert, rebase, checkout, and batch operations require direct PostgreSQL connections, not PgBouncer in transaction mode. sqevo will:
 
-1. **Use session-level advisory locks:** Deploy coordination uses session-level advisory locks. The default mode is non-blocking: `pg_try_advisory_lock(<lock_key>)`, which returns `false` immediately if the lock is held by another session. If the lock is not acquired, stitch exits with code 4 (concurrent deploy detected). For CI environments where waiting is preferred, an alternative wait mode is available: `SET lock_timeout = '<advisory_lock_timeout>'` followed by `pg_advisory_lock(<lock_key>)`. The `advisory_lock_timeout` is configurable (default: 30 seconds) via `stitch.toml` `[deploy] advisory_lock_timeout`. If the timeout expires, stitch exits with code 5 (lock timeout). The lock key is computed in the application layer as `pg_advisory_lock(<namespace_constant>, <project_hash>)` using the two-argument form with a fixed namespace constant and a stable application-computed hash of the project name. This avoids using `hashtext()`, whose output is NOT guaranteed stable across PostgreSQL major versions (the hash function can change during upgrades). The lock is held for the entire deploy session and released explicitly on completion via `pg_advisory_unlock()` (or automatically on disconnect for crash recovery). The same lock must be acquired for `revert`, `rebase`, and `checkout` — any command that modifies tracking state or executes DDL/DML. **Note:** Sqitch uses `LOCK TABLE sqitch.changes IN EXCLUSIVE MODE` (a table-level lock inside each change's transaction) for concurrency control. stitch's advisory lock approach is a stitch improvement that provides stronger coordination (spans the full deploy session, not just individual transactions).
-2. **Detect PgBouncer:** Attempt `SHOW pool_mode` (PgBouncer-specific command that returns the pool mode; errors on direct PG connections). This is a best-effort detection — it works for standard PgBouncer installations but may not detect all pooler configurations. If PgBouncer in transaction mode is detected, emit an **error** (not just a warning) for deploy/revert/rebase/checkout operations, as session-level advisory locks are not safe. The `connection_type` config option in `stitch.toml` is the reliable mechanism: `connection_type = "direct"` for non-PgBouncer poolers, PgBouncer in session mode, or when `SHOW pool_mode` detection is unreliable.
+1. **Use session-level advisory locks:** Deploy coordination uses session-level advisory locks. The default mode is non-blocking: `pg_try_advisory_lock(<lock_key>)`, which returns `false` immediately if the lock is held by another session. If the lock is not acquired, sqevo exits with code 4 (concurrent deploy detected). For CI environments where waiting is preferred, an alternative wait mode is available: `SET lock_timeout = '<advisory_lock_timeout>'` followed by `pg_advisory_lock(<lock_key>)`. The `advisory_lock_timeout` is configurable (default: 30 seconds) via `sqevo.toml` `[deploy] advisory_lock_timeout`. If the timeout expires, sqevo exits with code 5 (lock timeout). The lock key is computed in the application layer as `pg_advisory_lock(<namespace_constant>, <project_hash>)` using the two-argument form with a fixed namespace constant and a stable application-computed hash of the project name. This avoids using `hashtext()`, whose output is NOT guaranteed stable across PostgreSQL major versions (the hash function can change during upgrades). The lock is held for the entire deploy session and released explicitly on completion via `pg_advisory_unlock()` (or automatically on disconnect for crash recovery). The same lock must be acquired for `revert`, `rebase`, and `checkout` — any command that modifies tracking state or executes DDL/DML. **Note:** Sqitch uses `LOCK TABLE sqitch.changes IN EXCLUSIVE MODE` (a table-level lock inside each change's transaction) for concurrency control. sqevo's advisory lock approach is a sqevo improvement that provides stronger coordination (spans the full deploy session, not just individual transactions).
+2. **Detect PgBouncer:** Attempt `SHOW pool_mode` (PgBouncer-specific command that returns the pool mode; errors on direct PG connections). This is a best-effort detection — it works for standard PgBouncer installations but may not detect all pooler configurations. If PgBouncer in transaction mode is detected, emit an **error** (not just a warning) for deploy/revert/rebase/checkout operations, as session-level advisory locks are not safe. The `connection_type` config option in `sqevo.toml` is the reliable mechanism: `connection_type = "direct"` for non-PgBouncer poolers, PgBouncer in session mode, or when `SHOW pool_mode` detection is unreliable.
 3. **Re-issue SET commands:** At the start of each transaction, re-issue any session-level settings (`lock_timeout`, `statement_timeout`, `search_path`) as a safety measure.
 4. **Document:** Require direct PostgreSQL connections for deploy/batch operations. Application traffic can continue to use PgBouncer.
 
 ### DD14 — Deploy connection session settings
 
 Deploy connections should set:
-- `application_name = 'stitch/<command>/<project>'` — e.g., `stitch/deploy/myproject`. Visible in `pg_stat_activity`, critical for DBAs diagnosing lock contention or long-running queries during incidents.
-- `statement_timeout = 0` (or a configurable high value) — migrations are inherently long-running; a global `statement_timeout` (common in production, e.g., 30s) will kill legitimate operations like `VALIDATE CONSTRAINT`. For non-transactional DDL (e.g., `CREATE INDEX CONCURRENTLY`), a separate configurable timeout applies (default: 4 hours, configurable via `stitch.toml` `[deploy] non_transactional_statement_timeout`). This prevents indefinite hangs while allowing legitimately long operations.
-- `idle_in_transaction_session_timeout` — set to a configurable generous value (default: 10 minutes), not unlimited. This provides a safety net against hung deploy processes (e.g., operator walks away during a TUI prompt) without interfering with normal operation. Configurable via `stitch.toml` `[deploy] idle_in_transaction_session_timeout`.
+- `application_name = 'sqevo/<command>/<project>'` — e.g., `sqevo/deploy/myproject`. Visible in `pg_stat_activity`, critical for DBAs diagnosing lock contention or long-running queries during incidents.
+- `statement_timeout = 0` (or a configurable high value) — migrations are inherently long-running; a global `statement_timeout` (common in production, e.g., 30s) will kill legitimate operations like `VALIDATE CONSTRAINT`. For non-transactional DDL (e.g., `CREATE INDEX CONCURRENTLY`), a separate configurable timeout applies (default: 4 hours, configurable via `sqevo.toml` `[deploy] non_transactional_statement_timeout`). This prevents indefinite hangs while allowing legitimately long operations.
+- `idle_in_transaction_session_timeout` — set to a configurable generous value (default: 10 minutes), not unlimited. This provides a safety net against hung deploy processes (e.g., operator walks away during a TUI prompt) without interfering with normal operation. Configurable via `sqevo.toml` `[deploy] idle_in_transaction_session_timeout`.
 - `lock_timeout` — set by the lock timeout guard (5.9), per-migration configurable.
-- `search_path` — respect the database/role default (Sqitch-compatible behavior). Sqitch does not set `search_path`; stitch follows suit. Override available via `stitch.toml` `[deploy] search_path` for teams that want explicit control.
+- `search_path` — respect the database/role default (Sqitch-compatible behavior). Sqitch does not set `search_path`; sqevo follows suit. Override available via `sqevo.toml` `[deploy] search_path` for teams that want explicit control.
 
 ---
 
 ## 7. Architecture
 
 ```
-stitch/
+sqevo/
 ├── src/
 │   ├── cli.ts                  # Entry point, command routing
 │   ├── commands/
@@ -881,7 +881,7 @@ stitch/
 │   ├── ai/
 │   │   ├── explain.ts          # Migration explainer
 │   │   └── review.ts           # PR review comment generator
-│   ├── config.ts               # stitch.toml + sqitch.conf parsing
+│   ├── config.ts               # sqevo.toml + sqitch.conf parsing
 │   └── output.ts               # Shared output formatting
 ├── tests/
 │   ├── unit/
@@ -893,10 +893,10 @@ stitch/
 ├── README.md
 ├── package.json
 ├── tsconfig.json
-└── stitch.toml.example
+└── sqevo.toml.example
 ```
 
-**`sqitch.conf` format:** Sqitch uses a Git-style INI configuration format (not TOML — parsed by `Config::GitLike`). stitch must parse this format including sections, subsections, multi-valued keys, and includes:
+**`sqitch.conf` format:** Sqitch uses a Git-style INI configuration format (not TOML — parsed by `Config::GitLike`). sqevo must parse this format including sections, subsections, multi-valued keys, and includes:
 ```ini
 [core]
     engine = pg
@@ -914,17 +914,17 @@ stitch/
 
 The `[deploy]` section controls default deploy behavior: `verify` (default: `true`, run verify scripts after each change), `mode` (default: `change`, transaction scope). These correspond to `--verify`/`--no-verify` and `--mode` command-line flags.
 
-**Configuration precedence:** system (`$(prefix)/etc/sqitch/sqitch.conf`) < user (`~/.sqitch/sqitch.conf`) < project (`./sqitch.conf`) < `stitch.toml` (stitch-only features) < environment variables < command-line flags.
+**Configuration precedence:** system (`$(prefix)/etc/sqitch/sqitch.conf`) < user (`~/.sqitch/sqitch.conf`) < project (`./sqitch.conf`) < `sqevo.toml` (sqevo-only features) < environment variables < command-line flags.
 
-**Target URI scheme:** Sqitch uses a `db:` URI scheme: `db:pg://user:pass@host:port/dbname`. stitch must accept both `db:pg:` URIs (Sqitch compat) and standard PostgreSQL URIs (`postgresql://...`).
+**Target URI scheme:** Sqitch uses a `db:` URI scheme: `db:pg://user:pass@host:port/dbname`. sqevo must accept both `db:pg:` URIs (Sqitch compat) and standard PostgreSQL URIs (`postgresql://...`).
 
 **Default paths:** plan file = `./sqitch.plan`, top dir = `.`, deploy dir = `./deploy`, revert dir = `./revert`, verify dir = `./verify`. All overridable in `sqitch.conf` under `[core]`.
 
 ### Data flow — deploy
 
 ```
-stitch deploy
-  → parse sqitch.conf + stitch.toml
+sqevo deploy
+  → parse sqitch.conf + sqevo.toml
   → connect to database (set application_name, statement_timeout=0, idle_in_transaction_session_timeout=10min)
   → acquire session-level advisory lock (default: non-blocking)
     → pg_try_advisory_lock(<lock_key>) — returns false immediately if lock held
@@ -958,13 +958,13 @@ stitch deploy
 
 **Advisory lock release:** `pg_advisory_unlock()` must be called on ALL exit paths — successful completion, deploy failure (analysis block, script error, verification failure), and user abort. Disconnect-based release (PG automatically releases session-level advisory locks on disconnect) is the safety net for crashes, not the primary unlock mechanism. Implementations must use a `finally`-style pattern to ensure the unlock call is always reached.
 
-**Non-transactional changes:** stitch marks non-transactional changes via a plan file pragma added by `stitch add --no-transaction`. Additionally, stitch recognizes a `-- stitch:no-transaction` comment on the first line of the deploy script as a stitch-only convention. **Note:** Sqitch does NOT have a `-- sqitch-no-transaction` convention — no evidence of this mechanism exists in the Sqitch source code. Sqitch always wraps changes in `begin_work`/`finish_work`. The script comment convention is a stitch-only innovation for standalone linter mode (SA020 detection) and should not be described as Sqitch-compatible. During deploy, non-transactional changes execute without `BEGIN`/`COMMIT` wrapping. A separate configurable `statement_timeout` applies to non-transactional DDL (default: 4 hours, configurable via `stitch.toml` `[deploy] non_transactional_statement_timeout`).
+**Non-transactional changes:** sqevo marks non-transactional changes via a plan file pragma added by `sqevo add --no-transaction`. Additionally, sqevo recognizes a `-- sqevo:no-transaction` comment on the first line of the deploy script as a sqevo-only convention. **Note:** Sqitch does NOT have a `-- sqitch-no-transaction` convention — no evidence of this mechanism exists in the Sqitch source code. Sqitch always wraps changes in `begin_work`/`finish_work`. The script comment convention is a sqevo-only innovation for standalone linter mode (SA020 detection) and should not be described as Sqitch-compatible. During deploy, non-transactional changes execute without `BEGIN`/`COMMIT` wrapping. A separate configurable `statement_timeout` applies to non-transactional DDL (default: 4 hours, configurable via `sqevo.toml` `[deploy] non_transactional_statement_timeout`).
 
-**Non-transactional write-ahead tracking:** Before executing non-transactional DDL, stitch writes a "pending" record to `stitch.pending_changes` (in its own committed transaction). After the DDL succeeds, the record is updated to "complete" and the sqitch tracking tables are updated. On the next deploy, stitch checks for any "pending" non-transactional changes and verifies their state before deciding to skip or retry. This handles the case where stitch crashes between DDL execution and tracking table update. **Note:** `stitch.pending_changes` reads and writes are protected by the same session-level deploy advisory lock (DD13). The advisory lock prevents concurrent deploys from simultaneously reading or acting on pending records — without it, two processes could both attempt to verify and resolve the same pending change.
+**Non-transactional write-ahead tracking:** Before executing non-transactional DDL, sqevo writes a "pending" record to `sqevo.pending_changes` (in its own committed transaction). After the DDL succeeds, the record is updated to "complete" and the sqitch tracking tables are updated. On the next deploy, sqevo checks for any "pending" non-transactional changes and verifies their state before deciding to skip or retry. This handles the case where sqevo crashes between DDL execution and tracking table update. **Note:** `sqevo.pending_changes` reads and writes are protected by the same session-level deploy advisory lock (DD13). The advisory lock prevents concurrent deploys from simultaneously reading or acting on pending records — without it, two processes could both attempt to verify and resolve the same pending change.
 
-**`stitch.pending_changes` schema:**
+**`sqevo.pending_changes` schema:**
 ```sql
-CREATE TABLE stitch.pending_changes (
+CREATE TABLE sqevo.pending_changes (
     change_id       TEXT        PRIMARY KEY,
     change_name     TEXT        NOT NULL,
     project         TEXT        NOT NULL,
@@ -976,7 +976,7 @@ CREATE TABLE stitch.pending_changes (
 );
 ```
 
-**Non-transactional verify logic:** When stitch finds a "pending" record on the next deploy, it verifies the change's state. For index operations (`CREATE INDEX CONCURRENTLY`), stitch checks `pg_index.indisvalid` to determine if the index was successfully created. For other DDL, stitch runs the change's verify script (if one exists). Automated verification only works for known DDL patterns — for arbitrary DDL without a verify script, stitch reports the pending state and requires manual resolution.
+**Non-transactional verify logic:** When sqevo finds a "pending" record on the next deploy, it verifies the change's state. For index operations (`CREATE INDEX CONCURRENTLY`), sqevo checks `pg_index.indisvalid` to determine if the index was successfully created. For other DDL, sqevo runs the change's verify script (if one exists). Automated verification only works for known DDL patterns — for arbitrary DDL without a verify script, sqevo reports the pending state and requires manual resolution.
 
 Failure recovery for non-transactional DDL is fundamentally different: a failed `CREATE INDEX CONCURRENTLY` leaves an `INVALID` index that must be cleaned up. The error message must include the exact command to drop the INVALID index before retrying.
 
@@ -984,10 +984,10 @@ Failure recovery for non-transactional DDL is fundamentally different: a failed 
 
 **Transaction scope by `--mode`:**
 - `change` (default): each change in its own transaction (as shown above).
-- `all`: all changes in a single transaction. Failure rolls back everything including tracking table updates. Note: this is a stitch improvement — Sqitch uses per-change transactions with explicit revert on failure (see DD12).
+- `all`: all changes in a single transaction. Failure rolls back everything including tracking table updates. Note: this is a sqevo improvement — Sqitch uses per-change transactions with explicit revert on failure (see DD12).
 - `tag`: changes grouped by tag, each tag-group in a single transaction.
 
-Non-transactional changes always execute outside any transaction regardless of `--mode`. In `--mode all`, non-transactional changes break the surrounding transaction: stitch issues `COMMIT` before the non-transactional DDL, executes it, then issues `BEGIN` to continue with subsequent changes. This means `--mode all` cannot guarantee atomicity when non-transactional changes are present. If a transactional change fails after a non-transactional change has already committed, the non-transactional DDL remains deployed (its tracking update was committed separately). The subsequent transactional changes roll back, including their tracking records. This leaves a partially-deployed state where `stitch status` correctly reports which changes are deployed and which are not. stitch emits a warning at the start of deploy when `--mode all` is used with a plan containing non-transactional changes.
+Non-transactional changes always execute outside any transaction regardless of `--mode`. In `--mode all`, non-transactional changes break the surrounding transaction: sqevo issues `COMMIT` before the non-transactional DDL, executes it, then issues `BEGIN` to continue with subsequent changes. This means `--mode all` cannot guarantee atomicity when non-transactional changes are present. If a transactional change fails after a non-transactional change has already committed, the non-transactional DDL remains deployed (its tracking update was committed separately). The subsequent transactional changes roll back, including their tracking records. This leaves a partially-deployed state where `sqevo status` correctly reports which changes are deployed and which are not. sqevo emits a warning at the start of deploy when `--mode all` is used with a plan containing non-transactional changes.
 
 ---
 
@@ -1030,7 +1030,7 @@ Fast, no I/O, run on every commit.
 **Config parser**
 - `sqitch.conf` Git-style INI format: sections, subsections (`[engine "pg"]`), multi-valued keys
 - `db:pg:` URI scheme parsing and conversion to standard PostgreSQL URI
-- `stitch.toml` overrides: precedence rules (system < user < project < stitch.toml < env vars < flags)
+- `sqevo.toml` overrides: precedence rules (system < user < project < sqevo.toml < env vars < flags)
 - Invalid config: clear error messages, no panics
 
 **Analysis rules**
@@ -1041,7 +1041,7 @@ For each rule SA001–SA021:
 - Multi-statement scripts: rule fires on correct statement, not adjacent ones
 - Rule interactions: two rules on same statement both fire independently
 - PL/pgSQL body exclusion: DML inside CREATE FUNCTION / DO blocks does not fire SA010/SA011/SA008
-- Inline suppression: `-- stitch:disable SA010` prevents rule from firing
+- Inline suppression: `-- sqevo:disable SA010` prevents rule from firing
 - SA003 safe-cast allowlist: verify each safe cast does NOT fire, each unsafe cast does fire
 - SA020: CREATE INDEX CONCURRENTLY detection in transactional context
 
@@ -1083,7 +1083,7 @@ PG < 14 is best-effort/untested. Version-aware rules (SA002b) still fire based o
 | `deploy --to` | Stops at specified change, tracking state correct |
 | `deploy --dry-run` | Zero DB changes (verified via table counts before/after) |
 | `deploy --mode change` | Each change in own transaction, stops on first failure, tracking state consistent |
-| `deploy --mode all` | All changes in single transaction (stitch improvement over Sqitch's per-change txn + explicit revert), failure rolls back everything |
+| `deploy --mode all` | All changes in single transaction (sqevo improvement over Sqitch's per-change txn + explicit revert), failure rolls back everything |
 | `deploy --mode tag` | Changes grouped by tag, each group in a transaction |
 | `deploy` (non-transactional) | `CREATE INDEX CONCURRENTLY` executes without transaction wrapper, tracking updated separately |
 | `revert` | Reverts in reverse dependency order, updates tracking tables |
@@ -1132,7 +1132,7 @@ The most important test suite. Sqitch is the ground truth. We run identical oper
 **Infrastructure:**
 - Sqitch runs via Docker image `sqitch/sqitch:latest` — no Perl runtime needed
 - Both tools share the same Postgres container
-- Test harness executes a command with Sqitch, snapshots DB state, resets, executes same command with stitch, snapshots DB state, diffs
+- Test harness executes a command with Sqitch, snapshots DB state, resets, executes same command with sqevo, snapshots DB state, diffs
 
 **What we compare:**
 
@@ -1143,8 +1143,8 @@ The most important test suite. Sqitch is the ground truth. We run identical oper
 | `sqitch.dependencies` table | All columns: change_id, type, dependency, dependency_id |
 | `sqitch.events` table | All columns: event, change_id, change, project, note, requires, conflicts, tags, committed_at (within tolerance), committer_name, committer_email, planned_at, planner_name, planner_email |
 | `sqitch.tags` table | All columns: tag_id, tag, project, change_id, note, committed_at (within tolerance), committer_name, committer_email, planned_at, planner_name, planner_email |
-| `stitch status` stdout | Semantically equivalent (pending count, deployed count, last change name) |
-| `stitch log` stdout | Same changes in same order, same metadata |
+| `sqevo status` stdout | Semantically equivalent (pending count, deployed count, last change name) |
+| `sqevo log` stdout | Same changes in same order, same metadata |
 | Exit codes | Identical for all success and failure scenarios |
 
 **Timestamp tolerance:** committed_at / planned_at compared within 5 seconds (wall clock differences between runs).
@@ -1162,31 +1162,31 @@ The most important test suite. Sqitch is the ground truth. We run identical oper
 | `cross-project/` | Cross-project dependencies (`project:change`) |
 | `conflicts/` | Changes with conflict dependencies |
 | `non-transactional/` | Changes marked `--no-transaction` |
-| `mid-deploy/` | Project partially deployed by Sqitch, stitch continues |
+| `mid-deploy/` | Project partially deployed by Sqitch, sqevo continues |
 | `planner-edge-cases/` | Plan entries with commas in planner names (`First,Last,,`), trailing spaces, blank lines mid-plan |
 | `missing-verify/` | Deploy scripts with no corresponding verify file; test `--verify` skips gracefully |
 | `non-revertable/` | Revert script that raises an exception; test graceful failure handling |
 | `heavy-includes/` | 50+ `\i` includes per migration, both repo-relative and `\ir` script-relative paths |
 | `real-world-1/` | Anonymized real project, ~50 changes |
 | `real-world-2/` | Anonymized real project, ~200 changes, multiple tags |
-| `postgres-ai-console/` | PostgresAI Console (`postgres-ai/platform-ui/db`) — 255 sequential changes, heavy `\i`/`\ir` usage (130+ shared functions, 56+ views, 30+ triggers), `%uri` with URL, commas in planner names, missing verify scripts. **Customer zero: stitch must be a 100% drop-in replacement for this project.** |
+| `postgres-ai-console/` | PostgresAI Console (`postgres-ai/platform-ui/db`) — 255 sequential changes, heavy `\i`/`\ir` usage (130+ shared functions, 56+ views, 30+ triggers), `%uri` with URL, commas in planner names, missing verify scripts. **Customer zero: sqevo must be a 100% drop-in replacement for this project.** |
 
 **The "mid-deploy handoff" test** — most important for adoption:
 1. Deploy first half of project with real Sqitch
-2. Switch to stitch for second half
+2. Switch to sqevo for second half
 3. Verify tracking tables consistent, all remaining changes deploy correctly
-4. Verify stitch status matches what sqitch status would show for the full deployment
-5. Verify change IDs computed by stitch match those computed by Sqitch for the same changes
+4. Verify sqevo status matches what sqitch status would show for the full deployment
+5. Verify change IDs computed by sqevo match those computed by Sqitch for the same changes
 
 **The "reverse handoff" test** — safety net for adoption:
-1. Deploy full project with stitch
+1. Deploy full project with sqevo
 2. Switch to Sqitch
-3. Verify `sqitch status` reads stitch-written tracking tables correctly
+3. Verify `sqitch status` reads sqevo-written tracking tables correctly
 4. Verify `sqitch log` shows correct history
 5. Add a new change with Sqitch, deploy it, verify tracking tables are consistent
-6. Revert a stitch-deployed change with Sqitch, verify tracking state
+6. Revert a sqevo-deployed change with Sqitch, verify tracking state
 
-This bidirectional test validates that teams can safely evaluate stitch and revert to Sqitch if needed.
+This bidirectional test validates that teams can safely evaluate sqevo and revert to Sqitch if needed.
 
 ### 8.5 Analysis correctness tests
 
@@ -1236,9 +1236,9 @@ False positive rate tracked as a metric. Any new rule must have >=5 no_trigger f
 Migration tooling must be fast even on large plan files.
 
 - Plan parse: 10,000-change plan file parses in < 500ms
-- `stitch status` on 1,000-change deployed project: < 1s (single query, not N queries)
+- `sqevo status` on 1,000-change deployed project: < 1s (single query, not N queries)
 - Analysis: 1,000-line migration SQL analyzed in < 200ms
-- `stitch log` with 10,000 entries: < 2s (pagination by default)
+- `sqevo log` with 10,000 entries: < 2s (pagination by default)
 
 Run on every release, not every commit.
 
@@ -1322,7 +1322,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install
       - run: bun run build
-      - run: ./dist/stitch --version
+      - run: ./dist/sqevo --version
 ```
 
 **CI policy:**
@@ -1341,7 +1341,7 @@ bun test
 bun test tests/unit/
 
 # Run integration tests against local PG
-PGURI=postgres://postgres:test@localhost/stitch_test bun test tests/integration/
+PGURI=postgres://postgres:test@localhost/sqevo_test bun test tests/integration/
 
 # Run Sqitch compat tests (requires Docker)
 bun test tests/compat/
@@ -1369,7 +1369,7 @@ Core infrastructure. Nothing user-visible yet.
 - [ ] **Validation spike: `pgsql-parser` + `bun build --compile`** — verify that the native C addon (`libpg_query`) compiles on macOS and Linux, bundles correctly in the compiled binary, and works on a machine without build tools. If it fails, evaluate WASM alternatives (`pg-query-emscripten` or similar). This is a go/no-go for the architecture.
 - [ ] CI: GitHub Actions running `bun test` on push
 - [ ] Docker Compose for local PG test matrix (PG 14–18)
-- [ ] `src/config.ts`: parse `sqitch.conf` (Git-style INI with subsections) and `stitch.toml`
+- [ ] `src/config.ts`: parse `sqitch.conf` (Git-style INI with subsections) and `sqevo.toml`
 - [ ] `src/db/client.ts`: pg connection wrapper, URI parsing (`db:pg:` and `postgresql://`), error handling
 - [ ] `src/output.ts`: shared print/error/json output helpers
 - [ ] `src/cli.ts`: command router with `--help`, `--version`, `--format`
@@ -1385,8 +1385,8 @@ After this phase: drop-in replacement for all Sqitch commands.
 - [ ] `src/plan/types.ts`: Change, Tag, Dependency, Project types
 - [ ] Change ID computation: SHA-1 algorithm matching Sqitch byte-for-byte
 - [ ] `src/db/registry.ts`: read/write `sqitch.changes`, `sqitch.events`, `sqitch.tags`, `sqitch.projects`, `sqitch.dependencies`
-- [ ] `stitch init`: creates sqitch.conf, sqitch.plan, deploy/revert/verify dirs
-- [ ] `stitch add`: creates migration files, appends to plan (supports `--no-transaction`, `--conflict`)
+- [ ] `sqevo init`: creates sqitch.conf, sqitch.plan, deploy/revert/verify dirs
+- [ ] `sqevo add`: creates migration files, appends to plan (supports `--no-transaction`, `--conflict`)
 - [ ] Tests: plan round-trip, init, add, change ID verification against Sqitch
 
 **Sprint 3 — deploy + revert**
@@ -1406,20 +1406,20 @@ After this phase: drop-in replacement for all Sqitch commands.
 - [ ] Tests: deploy/revert, partial, dry-run, failed deploy recovery, advisory locks, non-transactional deploy
 
 **Sprint 4 — verify + status + log + remaining commands**
-- [ ] `stitch verify`: run verify scripts, report pass/fail per change
-- [ ] `stitch status`: pending count, deployed count, last deployed, target info, modified script detection
-- [ ] `stitch log`: deployment history with timestamps and committers
-- [ ] `stitch tag`: create tag at current deployment state
-- [ ] `stitch rework`: create reworked version of existing change
-- [ ] `stitch rebase`: revert + deploy convenience command
-- [ ] `stitch bundle`: package project for distribution
-- [ ] `stitch checkout`: deploy/revert to match VCS branch
-- [ ] `stitch show`: display change/tag details
-- [ ] `stitch plan`: display plan contents
-- [ ] `stitch upgrade`: upgrade registry schema
-- [ ] `stitch engine`, `stitch target`, `stitch config`: manage configuration
+- [ ] `sqevo verify`: run verify scripts, report pass/fail per change
+- [ ] `sqevo status`: pending count, deployed count, last deployed, target info, modified script detection
+- [ ] `sqevo log`: deployment history with timestamps and committers
+- [ ] `sqevo tag`: create tag at current deployment state
+- [ ] `sqevo rework`: create reworked version of existing change
+- [ ] `sqevo rebase`: revert + deploy convenience command
+- [ ] `sqevo bundle`: package project for distribution
+- [ ] `sqevo checkout`: deploy/revert to match VCS branch
+- [ ] `sqevo show`: display change/tag details
+- [ ] `sqevo plan`: display plan contents
+- [ ] `sqevo upgrade`: upgrade registry schema
+- [ ] `sqevo engine`, `sqevo target`, `sqevo config`: manage configuration
 - [ ] Compatibility test: adopt existing Sqitch project, verify parity
-- [ ] Reverse handoff test: deploy with stitch, verify Sqitch reads tracking tables correctly
+- [ ] Reverse handoff test: deploy with sqevo, verify Sqitch reads tracking tables correctly
 - [ ] Tests: verify, status, log, tag, rework, all compat tests
 
 ### Phase 2 — static analysis (Sprint 5–6, ~2 weeks)
@@ -1429,12 +1429,12 @@ After this phase: drop-in replacement for all Sqitch commands.
 - [ ] `src/analysis/preprocess.ts`: psql metacommand pre-processing (`\i`/`\ir` resolution, `\set` handling, strip unsupported metacommands with warning)
 - [ ] `src/analysis/index.ts`: analyzer entry point, rule registry, static/connected rule distinction
 - [ ] `src/analysis/reporter.ts`: text / json / github-annotations / gitlab-codequality output
-- [ ] `stitch analyze <file>`: standalone analysis command (works without sqitch.plan)
-- [ ] `stitch analyze` (no args): analyze pending migrations
-- [ ] `stitch analyze --changed`: analyze git-changed files
-- [ ] Inline suppression: `-- stitch:disable SA010` comment syntax
-- [ ] Per-file overrides in `stitch.toml`
-- [ ] Analysis integrated into `stitch deploy` (pre-deploy, blocks on error)
+- [ ] `sqevo analyze <file>`: standalone analysis command (works without sqitch.plan)
+- [ ] `sqevo analyze` (no args): analyze pending migrations
+- [ ] `sqevo analyze --changed`: analyze git-changed files
+- [ ] Inline suppression: `-- sqevo:disable SA010` comment syntax
+- [ ] Per-file overrides in `sqevo.toml`
+- [ ] Analysis integrated into `sqevo deploy` (pre-deploy, blocks on error)
 - [ ] `--force` flag to bypass analysis errors
 - [ ] `--format github-annotations` for CI
 - [ ] Rules SA001–SA010 (column safety, index, drop, DML)
@@ -1443,7 +1443,7 @@ After this phase: drop-in replacement for all Sqitch commands.
 **Sprint 6 — remaining rules + version awareness**
 - [ ] Rules SA011–SA021 (connected rules, sequence, lock timeout, rename, constraints, concurrency)
 - [ ] PG version awareness in rules (SA002/SA002b volatility + version, SA017 PG 12+ CHECK pattern, SA019 PG 12+ REINDEX CONCURRENTLY)
-- [ ] `stitch.toml` `[analysis]` config: skip, error_on_warn, max_affected_rows, pg_version
+- [ ] `sqevo.toml` `[analysis]` config: skip, error_on_warn, max_affected_rows, pg_version
 - [ ] Tests: all rules trigger/no-trigger, version-aware behavior, inline suppression, PL/pgSQL exclusion
 - [ ] Exit code 2 when analysis blocks deploy
 
@@ -1460,7 +1460,7 @@ After this phase: drop-in replacement for all Sqitch commands.
 
 - [ ] `src/tui/deploy.ts`: live deploy dashboard (TTY detection, plain fallback)
 - [ ] `--format json` on all commands: structured output
-- [ ] `stitch diff`: schema diff between deployed state and plan
+- [ ] `sqevo diff`: schema diff between deployed state and plan
 - [ ] PgBouncer detection and warning (DD13)
 - [ ] Man page generation
 - [ ] Homebrew formula
@@ -1468,10 +1468,10 @@ After this phase: drop-in replacement for all Sqitch commands.
 ### Phase 5 — expand/contract (Sprint 9–10, ~2 weeks)
 
 - [ ] `src/expand-contract/generator.ts`: generate expand + contract migration pair from column rename/type change
-- [ ] `src/expand-contract/tracker.ts`: track phase state in Postgres (new table in `stitch.*` schema)
-- [ ] `stitch add --expand`: generate linked pair
-- [ ] `stitch deploy --phase expand|contract`
-- [ ] Trigger generation for old↔new column sync (with `pg_trigger_depth()` + `TG_NAME LIKE 'stitch_sync_%'` recursion guard)
+- [ ] `src/expand-contract/tracker.ts`: track phase state in Postgres (new table in `sqevo.*` schema)
+- [ ] `sqevo add --expand`: generate linked pair
+- [ ] `sqevo deploy --phase expand|contract`
+- [ ] Trigger generation for old↔new column sync (with `pg_trigger_depth()` + `TG_NAME LIKE 'sqevo_sync_%'` recursion guard)
 - [ ] Partitioned table detection: install sync triggers on parent table (PG 14+ always supports trigger inheritance)
 - [ ] View shim for backward compat during transition
 - [ ] Backfill verification before contract phase
@@ -1484,20 +1484,20 @@ After this phase: drop-in replacement for all Sqitch commands.
 - [ ] `src/batch/worker.ts`: batch execution loop, lock_timeout + statement_timeout per batch, sleep, retry
 - [ ] `src/batch/progress.ts`: row counting (last processed PK tracking), ETA, dead tuple monitoring
 - [ ] Replication lag monitoring: query `pg_stat_replication`, pause when lag exceeds threshold
-- [ ] `stitch batch add`: register job, create queue entry
-- [ ] `stitch batch list`: show all jobs and state
-- [ ] `stitch batch status <job>`: progress, ETA, recent errors
-- [ ] `stitch batch pause|resume|cancel <job>`
-- [ ] `stitch batch retry <job>`: manual retry of dead jobs, resume from last processed PK
+- [ ] `sqevo batch add`: register job, create queue entry
+- [ ] `sqevo batch list`: show all jobs and state
+- [ ] `sqevo batch status <job>`: progress, ETA, recent errors
+- [ ] `sqevo batch pause|resume|cancel <job>`
+- [ ] `sqevo batch retry <job>`: manual retry of dead jobs, resume from last processed PK
 - [ ] Connection management: direct connection required, SET re-issued per batch
 - [ ] Tests: full job lifecycle, pause/resume, retry on failure, max retries → dead → manual retry, replication lag pause
 
 ### Phase 7 — AI + DBLab (Sprint 14–16, ~3 weeks)
 
 - [ ] `src/ai/explain.ts`: LLM-powered migration explainer (OpenAI/Anthropic/Ollama)
-- [ ] `stitch explain <migration>`: plain-English + risk summary
-- [ ] `stitch review`: Markdown PR comment with analysis results + explanation
-- [ ] `stitch suggest-revert <migration>`: LLM-assisted revert generation
+- [ ] `sqevo explain <migration>`: plain-English + risk summary
+- [ ] `sqevo review`: Markdown PR comment with analysis results + explanation
+- [ ] `sqevo suggest-revert <migration>`: LLM-assisted revert generation
 - [ ] DBLab integration: `--dblab-url`, `--dblab-token` flags on `deploy`
 - [ ] Clone provisioning, deploy+verify+revert on clone, report before touching prod
 - [ ] Tests: mock LLM responses, DBLab API mock
