@@ -38,6 +38,12 @@ export interface SqitchConf {
   entries: ConfEntry[];
   /** Raw source text (for diffing / write-back). */
   rawLines: string[];
+  /**
+   * Set of declared section paths (e.g., "engine.pg", "target.prod").
+   * Tracks sections/subsections even when they have no keys, so that
+   * e.g. `[engine "pg"]` with no keys is not silently lost.
+   */
+  sections?: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +83,7 @@ export function toBool(v: string | true | undefined): boolean | undefined {
 export function parseSqitchConf(text: string): SqitchConf {
   const rawLines = text.split(/\r?\n/);
   const entries: ConfEntry[] = [];
+  const sections = new Set<string>();
 
   let currentSection = "";
   let currentSubsection: string | undefined;
@@ -96,6 +103,13 @@ export function parseSqitchConf(text: string): SqitchConf {
     if (sectionMatch) {
       currentSection = sectionMatch[1]!.toLowerCase();
       currentSubsection = sectionMatch[2]; // undefined if no subsection
+
+      // Track declared sections/subsections (even if they have no keys)
+      if (currentSubsection !== undefined) {
+        sections.add(`${currentSection}.${currentSubsection}`);
+      } else {
+        sections.add(currentSection);
+      }
       continue;
     }
 
@@ -142,7 +156,7 @@ export function parseSqitchConf(text: string): SqitchConf {
     // Unrecognized line — skip silently (robust parsing)
   }
 
-  return { entries, rawLines };
+  return { entries, rawLines, sections };
 }
 
 /**
@@ -190,17 +204,60 @@ function stripInlineComment(raw: string): string {
 /**
  * Remove surrounding double quotes from a value, if present.
  * Also handles escaped characters within quotes.
+ *
+ * Uses a single-pass regex replacement to avoid order-of-replacement bugs.
+ * For example, `\\n` (escaped backslash + literal n) must become `\n` (one
+ * char: backslash, one char: n), NOT a newline. Processing `\n` before `\\`
+ * in separate passes would misinterpret this.
  */
 function unquote(v: string): string {
   if (v.startsWith('"') && v.endsWith('"') && v.length >= 2) {
-    return v
-      .slice(1, -1)
-      .replace(/\\n/g, "\n")
-      .replace(/\\t/g, "\t")
-      .replace(/\\\\/g, "\\")
-      .replace(/\\"/g, '"');
+    const ESCAPES: Record<string, string> = {
+      "\\": "\\",
+      n: "\n",
+      t: "\t",
+      b: "\b",
+      r: "\r",
+      '"': '"',
+    };
+    return v.slice(1, -1).replace(/\\([\\ntbr"])/g, (_, ch: string) => {
+      return ESCAPES[ch] ?? "\\" + ch;
+    });
   }
   return v;
+}
+
+// ---------------------------------------------------------------------------
+// Key normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a config key for comparison.
+ *
+ * Git config specifies that section names and key names are case-insensitive,
+ * but subsection names are case-sensitive.  For a key like
+ * `target.MyTarget.uri`, we lowercase `target` and `uri` but preserve
+ * `MyTarget`'s case.
+ *
+ * Key formats:
+ *   - "section.key"             → lowercase both
+ *   - "section.subsection.key"  → lowercase section and key, preserve subsection
+ */
+function normalizeKey(key: string): string {
+  const firstDot = key.indexOf(".");
+  if (firstDot < 0) return key.toLowerCase();
+
+  const lastDot = key.lastIndexOf(".");
+  if (firstDot === lastDot) {
+    // "section.key" — lowercase both parts
+    return key.toLowerCase();
+  }
+
+  // "section.subsection.key" — lowercase section and key, preserve subsection
+  const section = key.slice(0, firstDot).toLowerCase();
+  const subsection = key.slice(firstDot + 1, lastDot); // preserve case
+  const keyName = key.slice(lastDot + 1).toLowerCase();
+  return `${section}.${subsection}.${keyName}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -215,9 +272,9 @@ function unquote(v: string): string {
 export function confGet(conf: SqitchConf, key: string): string | true | undefined {
   // Find last matching entry
   let result: string | true | undefined;
-  const lower = key.toLowerCase();
+  const normalized = normalizeKey(key);
   for (const entry of conf.entries) {
-    if (entry.key.toLowerCase() === lower) {
+    if (normalizeKey(entry.key) === normalized) {
       result = entry.value;
     }
   }
@@ -245,22 +302,26 @@ export function confGetBool(conf: SqitchConf, key: string): boolean | undefined 
  * Get all values for a multi-valued key (in order of appearance).
  */
 export function confGetAll(conf: SqitchConf, key: string): Array<string | true> {
-  const lower = key.toLowerCase();
+  const normalized = normalizeKey(key);
   return conf.entries
-    .filter((e) => e.key.toLowerCase() === lower)
+    .filter((e) => normalizeKey(e.key) === normalized)
     .map((e) => e.value);
 }
 
 /**
  * List all subsection names for a given section.
  * e.g., listSubsections(conf, "target") => ["localtest", "production"]
+ *
+ * Also includes subsections declared with no keys (tracked in conf.sections).
  */
 export function confListSubsections(conf: SqitchConf, section: string): string[] {
   const prefix = section.toLowerCase() + ".";
   const subs = new Set<string>();
+
+  // Collect from entries (subsections that have keys)
   for (const entry of conf.entries) {
-    const lower = entry.key.toLowerCase();
-    if (lower.startsWith(prefix)) {
+    const normalized = normalizeKey(entry.key);
+    if (normalized.startsWith(prefix)) {
       // key is "section.sub.key" or "section.key"
       const rest = entry.key.slice(prefix.length);
       const dotIndex = rest.indexOf(".");
@@ -270,6 +331,21 @@ export function confListSubsections(conf: SqitchConf, section: string): string[]
       }
     }
   }
+
+  // Collect from declared sections (subsections that may have no keys)
+  if (conf.sections) {
+    for (const declared of conf.sections) {
+      const normalized = normalizeKey(declared);
+      if (normalized.startsWith(prefix)) {
+        const rest = declared.slice(prefix.length);
+        // rest should be just the subsection name (no further dots)
+        if (rest && !rest.includes(".")) {
+          subs.add(rest);
+        }
+      }
+    }
+  }
+
   return [...subs];
 }
 
@@ -284,13 +360,13 @@ export function confGetSection(
 ): Record<string, string | true> {
   const prefix =
     subsection !== undefined
-      ? `${section}.${subsection}.`.toLowerCase()
-      : `${section}.`.toLowerCase();
+      ? normalizeKey(`${section}.${subsection}.x`).slice(0, -1) // strip the "x", keep trailing dot
+      : `${section.toLowerCase()}.`;
   const result: Record<string, string | true> = {};
   for (const entry of conf.entries) {
-    const lower = entry.key.toLowerCase();
-    if (lower.startsWith(prefix)) {
-      const rest = entry.key.slice(prefix.length);
+    const normalized = normalizeKey(entry.key);
+    if (normalized.startsWith(prefix)) {
+      const rest = normalized.slice(prefix.length);
       // For section-only queries, skip entries that have subsections
       if (subsection === undefined && rest.includes(".")) continue;
       result[rest] = entry.value;
@@ -308,21 +384,21 @@ export function confGetSection(
  * occurrence in entries. Otherwise appends a new entry.
  */
 export function confSet(conf: SqitchConf, key: string, value: string | true): void {
-  const lower = key.toLowerCase();
+  const normalized = normalizeKey(key);
 
   // Find last matching entry index
   let lastIndex = -1;
   for (let i = conf.entries.length - 1; i >= 0; i--) {
-    if (conf.entries[i]!.key.toLowerCase() === lower) {
+    if (normalizeKey(conf.entries[i]!.key) === normalized) {
       lastIndex = i;
       break;
     }
   }
 
   if (lastIndex >= 0) {
-    conf.entries[lastIndex] = { key: lower, value };
+    conf.entries[lastIndex] = { key: normalized, value };
   } else {
-    conf.entries.push({ key: lower, value });
+    conf.entries.push({ key: normalized, value });
   }
 }
 
@@ -330,8 +406,8 @@ export function confSet(conf: SqitchConf, key: string, value: string | true): vo
  * Remove all entries matching a key.
  */
 export function confUnset(conf: SqitchConf, key: string): void {
-  const lower = key.toLowerCase();
-  conf.entries = conf.entries.filter((e) => e.key.toLowerCase() !== lower);
+  const normalized = normalizeKey(key);
+  conf.entries = conf.entries.filter((e) => normalizeKey(e.key) !== normalized);
 }
 
 /**

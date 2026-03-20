@@ -294,31 +294,76 @@ function readFileSafe(path: string): string | null {
 
 /**
  * Merge multiple SqitchConf objects. Later configs override earlier ones.
- * Multi-valued keys: later configs replace all values for that key.
+ *
+ * When a key appears in a later (higher-precedence) config, ALL values for
+ * that key from earlier configs are removed and replaced by the values from
+ * the later config. This ensures that multi-valued keys are fully overridden
+ * rather than partially appended to.
+ *
+ * For example, if system config has `core.engine = pg` repeated 3 times and
+ * the project config has `core.engine = mysql`, the merged result will contain
+ * only `core.engine = mysql` — not 3 pg entries plus 1 mysql entry.
  */
-function mergeConfs(confs: SqitchConf[]): SqitchConf {
+export function mergeConfs(confs: SqitchConf[]): SqitchConf {
   if (confs.length === 0) {
-    return { entries: [], rawLines: [] };
+    return { entries: [], rawLines: [], sections: new Set() };
   }
   if (confs.length === 1) {
     return confs[0]!;
   }
 
-  // Merge by collecting all entries. For the same key, later entries
-  // override earlier ones (last-write-wins for scalar reads).
-  const merged: ConfEntry[] = [];
-  const seen = new Map<string, number>(); // key -> last index in merged
+  // Collect the set of keys defined in each later config so we know which
+  // keys from earlier configs to drop.
+  const overriddenKeys = new Set<string>();
+  for (let i = 1; i < confs.length; i++) {
+    for (const entry of confs[i]!.entries) {
+      overriddenKeys.add(normalizeKeyForMerge(entry.key));
+    }
+  }
 
-  for (const conf of confs) {
-    for (const entry of conf.entries) {
-      const lower = entry.key.toLowerCase();
-      const existing = seen.get(lower);
-      if (existing !== undefined) {
-        // Override existing entry
-        merged[existing] = entry;
-      } else {
-        seen.set(lower, merged.length);
+  // Build merged entries:
+  // 1. Start with base config, filtering out keys that are overridden by later configs
+  // 2. Then append entries from later configs (also filtering earlier overrides)
+  const merged: ConfEntry[] = [];
+  const addedFromLater = new Set<string>(); // track which keys we've already added from later confs
+
+  // First, add entries from the base config that are NOT overridden
+  for (const entry of confs[0]!.entries) {
+    const nk = normalizeKeyForMerge(entry.key);
+    if (!overriddenKeys.has(nk)) {
+      merged.push(entry);
+    }
+  }
+
+  // Then, for each subsequent config, add all their entries.
+  // If multiple later configs define the same key, only the last one's entries survive.
+  // We process in reverse to determine which later config "wins" for each key.
+  const winningConf = new Map<string, number>(); // normalized key -> index of winning conf
+  for (let i = confs.length - 1; i >= 1; i--) {
+    for (const entry of confs[i]!.entries) {
+      const nk = normalizeKeyForMerge(entry.key);
+      if (!winningConf.has(nk)) {
+        winningConf.set(nk, i);
+      }
+    }
+  }
+
+  // Now add entries from later configs, but only from the winning conf for each key
+  for (let i = 1; i < confs.length; i++) {
+    for (const entry of confs[i]!.entries) {
+      const nk = normalizeKeyForMerge(entry.key);
+      if (winningConf.get(nk) === i) {
         merged.push(entry);
+      }
+    }
+  }
+
+  // Merge sections sets
+  const mergedSections = new Set<string>();
+  for (const conf of confs) {
+    if (conf.sections) {
+      for (const s of conf.sections) {
+        mergedSections.add(s);
       }
     }
   }
@@ -326,7 +371,27 @@ function mergeConfs(confs: SqitchConf[]): SqitchConf {
   return {
     entries: merged,
     rawLines: confs[confs.length - 1]!.rawLines,
+    sections: mergedSections,
   };
+}
+
+/**
+ * Normalize a key for merge comparison. Uses the same rules as normalizeKey
+ * in sqitch-conf.ts: lowercase section and key name, preserve subsection case.
+ */
+function normalizeKeyForMerge(key: string): string {
+  const firstDot = key.indexOf(".");
+  if (firstDot < 0) return key.toLowerCase();
+
+  const lastDot = key.lastIndexOf(".");
+  if (firstDot === lastDot) {
+    return key.toLowerCase();
+  }
+
+  const section = key.slice(0, firstDot).toLowerCase();
+  const subsection = key.slice(firstDot + 1, lastDot);
+  const keyName = key.slice(lastDot + 1).toLowerCase();
+  return `${section}.${subsection}.${keyName}`;
 }
 
 /**

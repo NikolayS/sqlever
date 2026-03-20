@@ -1,5 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { loadConfig } from "../../src/config/index";
+import { loadConfig, mergeConfs } from "../../src/config/index";
+import {
+  parseSqitchConf,
+  confGetString,
+  confGetAll,
+  confListSubsections,
+} from "../../src/config/sqitch-conf";
 
 // ---------------------------------------------------------------------------
 // loadConfig with fixture files
@@ -216,5 +222,66 @@ describe("MergedConfig structure", () => {
   it("sqleverToml is null when no sqlever.toml exists", () => {
     const config = loadConfig("/tmp/nonexistent-12345", {}, {});
     expect(config.sqleverToml).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mergeConfs — multi-valued key replacement
+// ---------------------------------------------------------------------------
+
+describe("mergeConfs", () => {
+  it("replaces ALL values for a key from the overriding file", () => {
+    // System config has engine repeated 3 times
+    const system = parseSqitchConf(
+      "[core]\n\tengine = pg\n\tengine = mysql\n\tengine = pg\n",
+    );
+    // Project config overrides with a single value
+    const project = parseSqitchConf("[core]\n\tengine = sqlite\n");
+
+    const merged = mergeConfs([system, project]);
+
+    // All 3 system entries should be gone; only the project's entry remains
+    const allValues = confGetAll(merged, "core.engine");
+    expect(allValues).toEqual(["sqlite"]);
+    expect(confGetString(merged, "core.engine")).toBe("sqlite");
+  });
+
+  it("preserves keys not overridden by later config", () => {
+    const system = parseSqitchConf(
+      "[core]\n\tengine = pg\n\ttop_dir = /system\n",
+    );
+    const project = parseSqitchConf("[core]\n\tengine = mysql\n");
+
+    const merged = mergeConfs([system, project]);
+
+    expect(confGetString(merged, "core.engine")).toBe("mysql");
+    expect(confGetString(merged, "core.top_dir")).toBe("/system"); // preserved
+  });
+
+  it("merges sections sets from all configs", () => {
+    const system = parseSqitchConf('[engine "pg"]\n');
+    const project = parseSqitchConf('[target "prod"]\n\turi = db:pg://host/db\n');
+
+    const merged = mergeConfs([system, project]);
+
+    expect(merged.sections).toBeDefined();
+    expect(merged.sections!.has("engine.pg")).toBe(true);
+    expect(merged.sections!.has("target.prod")).toBe(true);
+
+    // Both subsections should be listed
+    expect(confListSubsections(merged, "engine")).toEqual(["pg"]);
+    expect(confListSubsections(merged, "target")).toEqual(["prod"]);
+  });
+
+  it("later config with multi-valued key replaces all earlier values", () => {
+    const base = parseSqitchConf(
+      "[deploy]\n\ttag = v1\n\ttag = v2\n\ttag = v3\n",
+    );
+    const override = parseSqitchConf("[deploy]\n\ttag = v4\n\ttag = v5\n");
+
+    const merged = mergeConfs([base, override]);
+
+    const allTags = confGetAll(merged, "deploy.tag");
+    expect(allTags).toEqual(["v4", "v5"]); // v1, v2, v3 are gone
   });
 });

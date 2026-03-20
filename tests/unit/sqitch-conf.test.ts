@@ -79,10 +79,16 @@ describe("customer zero (PostgresAI Console sqitch.conf)", () => {
 
   it("handles empty subsection [engine \"pg\"]", () => {
     const subs = confListSubsections(conf, "engine");
-    // The empty subsection [engine "pg"] creates no entries,
-    // so it won't appear in subsection listing (no keys to list).
-    // This is correct — an empty section is valid but has no data.
-    expect(subs).toEqual([]);
+    // Even though [engine "pg"] has no keys, the declared subsection
+    // is tracked in conf.sections and included in the listing.
+    expect(subs).toEqual(["pg"]);
+  });
+
+  it("tracks declared sections including empty ones", () => {
+    expect(conf.sections).toBeDefined();
+    expect(conf.sections!.has("engine.pg")).toBe(true);
+    expect(conf.sections!.has("target.localtest")).toBe(true);
+    expect(conf.sections!.has("core")).toBe(true);
   });
 
   it("parses [target \"localtest\"] with URI containing password", () => {
@@ -292,6 +298,27 @@ describe("confGet missing keys", () => {
     expect(confGetString(conf, "CORE.ENGINE")).toBe("pg");
     expect(confGetString(conf, "Core.Engine")).toBe("pg");
   });
+
+  it("is case-sensitive for subsection names", () => {
+    // Git config: section and key names are case-insensitive,
+    // but subsection names are case-sensitive.
+    const text =
+      '[target "MyTarget"]\n\turi = db:pg://host/mydb\n' +
+      '[target "mytarget"]\n\turi = db:pg://host/other\n';
+    const conf2 = parseSqitchConf(text);
+    // These should be two different targets
+    expect(confGetString(conf2, "target.MyTarget.uri")).toBe("db:pg://host/mydb");
+    expect(confGetString(conf2, "target.mytarget.uri")).toBe("db:pg://host/other");
+    // Section and key name are case-insensitive, but subsection is not
+    expect(confGetString(conf2, "TARGET.MyTarget.URI")).toBe("db:pg://host/mydb");
+    // Different-case subsection should not match
+    expect(confGetString(conf2, "target.MYTARGET.uri")).toBeUndefined();
+    // Both subsections should be listed
+    const subs = confListSubsections(conf2, "target");
+    expect(subs).toContain("MyTarget");
+    expect(subs).toContain("mytarget");
+    expect(subs.length).toBe(2);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -403,6 +430,14 @@ describe("edge cases", () => {
     const text = '[core]\n\tpath = "a\\\\b"\n';
     const conf = parseSqitchConf(text);
     expect(confGetString(conf, "core.path")).toBe("a\\b");
+  });
+
+  it("handles \\\\n (escaped backslash + literal n) without converting to newline", () => {
+    // \\n in the config file means a literal backslash followed by the letter n.
+    // It must NOT be interpreted as a newline character.
+    const text = '[core]\n\tpath = "C:\\\\nightly\\\\new"\n';
+    const conf = parseSqitchConf(text);
+    expect(confGetString(conf, "core.path")).toBe("C:\\nightly\\new");
   });
 
   it("handles multiple sections of the same name", () => {
