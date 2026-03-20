@@ -101,7 +101,7 @@ In the agentic development era, engineers increasingly have AI assistants writin
 ### Goals
 
 - Drop-in CLI replacement for Sqitch — alias `sqitch` → `sqlever` and nothing breaks
-- PostgreSQL-only — depth over breadth, know the target platform deeply
+- PostgreSQL first — depth over breadth, know the target platform deeply. Other databases may follow in future versions.
 - Single compiled binary — `bun build --compile`, no runtime deps, <50ms startup
 - Static analysis as a first-class citizen — dangerous patterns caught before deploy, not after
 - All advanced features are opt-in — v1.0 is safe to adopt without understanding expand/contract or batching
@@ -110,7 +110,7 @@ In the agentic development era, engineers increasingly have AI assistants writin
 
 ### Non-goals
 
-- MySQL, SQLite, Oracle, CockroachDB support — explicitly out of scope
+- MySQL, SQLite, Oracle, CockroachDB support — out of scope for v1.x. May be added in future versions.
 - ORM integration (ActiveRecord, Django ORM, Alembic, Prisma) — out of scope
 - GUI or web dashboard — CLI only, composable with other tools
 - Cloud-hosted service — out of scope for now
@@ -709,9 +709,9 @@ Rust would give a faster binary but TypeScript + Bun gives:
 
 Revisit if performance becomes an issue.
 
-### DD2 — PostgreSQL-only
+### DD2 — PostgreSQL first
 
-Depth beats breadth. Sqitch's multi-DB support is one reason it can't do PG-specific things (CONCURRENT indexes, advisory locks, partition introspection, `pg_stat_activity`). We know our target. Every feature can assume PG-native primitives.
+Depth beats breadth. Sqitch's multi-DB support is one reason it can't do PG-specific things (CONCURRENT indexes, advisory locks, partition introspection, `pg_stat_activity`). v1.x targets PostgreSQL exclusively — every feature can assume PG-native primitives. Other databases may be added in future major versions, but the architecture should not be prematurely abstracted for multi-DB support. When the time comes, database-specific modules (engine adapters) will be introduced without compromising PG depth.
 
 ### DD3 — Sqitch tracking schema compatibility
 
