@@ -1,8 +1,8 @@
 # stitch — Product Specification
 
-**Version:** 0.2 (draft)
-**Status:** Pre-development
-**License:** Apache 2.0
+- **Version:** 0.2 (draft)
+- **Status:** Pre-development
+- **License:** Apache 2.0
 
 ---
 
@@ -399,6 +399,14 @@ For batched DML, we use a PGQ-style 3-partition rotating table rather than `SELE
 
 stitch never calls external services without explicit configuration. No telemetry, no update checks, no LLM calls unless `stitch explain`/`stitch review` is explicitly invoked.
 
+### DD11 — Sqitch as the oracle for compatibility testing
+
+We run Sqitch and stitch side-by-side against identical databases and compare output, tracking table state, and exit codes. Sqitch is the ground truth. Any divergence is a bug in stitch.
+
+This means Sqitch must be installed in CI. It is available as a Docker image (`sqitch/sqitch`) and as a Perl cpan package. We use the Docker image to avoid Perl runtime management.
+
+We maintain a corpus of real-world Sqitch projects as test fixtures (anonymized where needed). Each fixture is tested against both tools and outputs compared.
+
 ---
 
 ## 7. Architecture
@@ -487,54 +495,290 @@ stitch deploy
 
 ## 8. Testing strategy
 
-### Unit tests
+Reliability is non-negotiable for a migration tool. A bug in a migration runner can corrupt production databases. We invest heavily in testing infrastructure from day one.
 
-- Plan parser: round-trip parse/write for all valid sqitch.plan formats
-- Each analysis rule: SQL strings that should trigger / should not trigger
-- Config parser: all valid sqitch.conf + stitch.toml combinations
-- Snapshot includes: mock git, verify correct commit resolution
+### 8.1 Test pyramid
 
-### Integration tests
+```
+         ┌──────────────┐
+         │  E2E compat  │  ← Sqitch oracle tests (slowest, highest confidence)
+        ┌┴──────────────┴┐
+        │  Integration   │  ← Real Postgres, real filesystem
+       ┌┴────────────────┴┐
+       │    Unit tests    │  ← Pure functions, no I/O (fastest)
+       └──────────────────┘
+```
 
-Real Postgres (Docker). Test matrix: PG 14, 15, 16, 17, 18.
+### 8.2 Unit tests
 
-For each PG version:
-- `init` → creates correct directory structure and conf files
-- `add` → creates correct migration files, updates plan
-- `deploy` → executes SQL, updates tracking tables correctly
-- `revert` → reverts correctly, updates tracking tables
-- `verify` → runs verify script, passes/fails correctly
-- `status` → accurate pending/deployed counts
-- `log` → correct history
-- `deploy --dry-run` → no DB changes
-- Dependency ordering: deploy respects declared deps
-- Partial deploy: `--to <change>` stops at correct point
-- Failed deploy: tracking tables left in correct state, revert possible
+Fast, no I/O, run on every commit.
 
-### Analysis rule tests
+**Plan parser**
+- Round-trip: parse every valid sqitch.plan format → serialize → parse again, result identical
+- All comment styles (`#`, blank lines, pragmas)
+- All dependency forms (`@tag`, `change`, `schema:change`)
+- Unicode in change names and notes
+- Edge cases: empty plan, plan with only pragmas, plan with tags only
 
+**Config parser**
+- `sqitch.conf` INI format: all section types, all known keys
+- `stitch.toml` overrides: precedence rules (project conf < user conf < env vars < flags)
+- Invalid config: clear error messages, no panics
+
+**Analysis rules**
 For each rule SA001–SA015:
-- SQL that must trigger the rule at correct severity
-- SQL that must NOT trigger (false positive prevention)
-- SQL that's safe on PG 17 but dangerous on PG 14 (version-aware rules)
+- SQL strings that must trigger the rule (positive cases, with location info)
+- SQL strings that must NOT trigger (false positive prevention)
+- Version-aware cases: SQL safe on PG 17 but dangerous on PG 11 (e.g. SA002)
+- Multi-statement scripts: rule fires on correct statement, not adjacent ones
+- Rule interactions: two rules on same statement both fire independently
 
-### Compatibility tests
+**Snapshot includes**
+- Mock git: given commit hash → file content mapping, verify correct version resolved
+- Fallback: no git repo → HEAD used, no error
+- Missing file: clear error, not silent skip
+- Nested includes: `\i a.sql` where `a.sql` also has `\i b.sql`
 
-Run against a real Sqitch project:
-- Existing `sqitch.plan` parses without modification
-- Existing Sqitch tracking tables are read correctly
-- `stitch status` matches what `sqitch status` would show
-- `stitch deploy` continues from where `sqitch deploy` left off
+**Topological sort**
+- Linear deps: A → B → C deploys in order
+- Diamond deps: A → B, A → C, D → B, D → C deploys correctly
+- Cycle detection: circular deps produce clear error before any deploy
+- Partial deploy `--to <change>`: correct subset selected
 
-### CI matrix
+**Exit codes**
+- Each exit code scenario produces the correct code
+- Analysis error (2) vs deploy failure (1) vs verification failure (3) are distinct
+
+### 8.3 Integration tests
+
+Real Postgres via Docker. No mocks for DB layer. Each test gets a fresh database.
+
+**PG version matrix: 14, 15, 16, 17, 18.**
+
+**Command coverage (per PG version):**
+
+| Command | What we test |
+|---------|-------------|
+| `init` | Creates sqitch.conf, sqitch.plan, deploy/ revert/ verify/ dirs |
+| `add` | Creates correctly named files, appends to plan, handles `-r` deps |
+| `deploy` | Executes SQL, updates sqitch.changes + sqitch.events, correct timestamps |
+| `deploy --to` | Stops at specified change, tracking state correct |
+| `deploy --dry-run` | Zero DB changes (verified via table counts before/after) |
+| `deploy --mode change` | Stops on first failure, tracking state consistent |
+| `revert` | Reverts in reverse dependency order, updates tracking tables |
+| `revert --to` | Reverts to specified change, not further |
+| `verify` | Runs verify script, PASS/FAIL per change, correct exit code |
+| `status` | Correct pending count, deployed count, last deployed change |
+| `log` | Full history in correct order, timestamps reasonable |
+| `tag` | Tag appears in plan, visible in status/log |
+
+**Failure scenarios:**
+- Deploy script fails (SQL error): tracking tables left consistent, revert possible
+- Deploy script fails mid-batch (multiple changes): partial state recoverable
+- Verify script fails: correct exit code 3, clear output
+- Database unreachable: exit code 127, clear error message
+- Concurrent deploy from two processes: second process detects in-progress deploy
+
+**Dependency scenarios:**
+- Diamond dependency deploys correctly
+- Missing dependency detected before deploy starts
+- Circular dependency detected before deploy starts
+
+**Schema isolation:**
+- `sqitch.*` schema created correctly on first deploy
+- Existing `sqitch.*` schema from prior Sqitch deployment used without modification
+
+### 8.4 Sqitch oracle / compatibility tests
+
+The most important test suite. Sqitch is the ground truth. We run identical operations against identical databases with both tools and compare results.
+
+**Infrastructure:**
+- Sqitch runs via Docker image `sqitch/sqitch:latest` — no Perl runtime needed
+- Both tools share the same Postgres container
+- Test harness executes a command with Sqitch, snapshots DB state, resets, executes same command with stitch, snapshots DB state, diffs
+
+**What we compare:**
+
+| Artifact | How we compare |
+|----------|----------------|
+| `sqitch.plan` output | Byte-for-byte identical after `add` |
+| `sqitch.changes` table | All columns: change_id, script_hash, change, project, deployed_at (within tolerance), deployed_by, requires, conflicts |
+| `sqitch.events` table | event, change, tags, logged_at (within tolerance) |
+| `sqitch.tags` table | tag, applied_at (within tolerance) |
+| `stitch status` stdout | Semantically equivalent (pending count, deployed count, last change name) |
+| `stitch log` stdout | Same changes in same order, same metadata |
+| Exit codes | Identical for all success and failure scenarios |
+
+**Timestamp tolerance:** deployed_at / logged_at compared within 5 seconds (wall clock differences between runs).
+
+**Test fixture corpus** — maintained in `tests/fixtures/sqitch-projects/`:
+
+| Fixture | Description |
+|---------|-------------|
+| `minimal/` | 1 change, no deps, no tags |
+| `linear/` | 10 changes, linear deps A→B→C... |
+| `diamond/` | Diamond dependency graph |
+| `tagged/` | Multiple tags, partial deploy to tag |
+| `with-includes/` | `\i` shared SQL files |
+| `mid-deploy/` | Project partially deployed by Sqitch, stitch continues |
+| `real-world-1/` | Anonymized real project, ~50 changes |
+| `real-world-2/` | Anonymized real project, ~200 changes, multiple tags |
+
+**The "mid-deploy handoff" test** — most important for adoption:
+1. Deploy first half of project with real Sqitch
+2. Switch to stitch for second half
+3. Verify tracking tables consistent, all remaining changes deploy correctly
+4. Verify stitch status matches what sqitch status would show for the full deployment
+
+### 8.5 Analysis correctness tests
+
+For each analysis rule, maintain a fixture directory:
+
+```
+tests/fixtures/analysis/
+  SA001/
+    trigger/
+      add_column_not_null_no_default.sql        # must trigger
+      add_column_not_null_with_check.sql        # must trigger
+    no_trigger/
+      add_column_nullable.sql                   # must NOT trigger
+      add_column_not_null_with_default.sql      # must NOT trigger (PG 17)
+    version_aware/
+      add_column_not_null_with_default.pg11.trigger.sql  # triggers on PG < 11
+  SA002/
+    ...
+```
+
+Test runner:
+- For every `trigger/` file: analysis must produce the rule ID at correct severity
+- For every `no_trigger/` file: analysis must produce zero findings for that rule
+- Version-aware files: tested against relevant PG versions in matrix
+
+False positive rate tracked as a metric. Any new rule must have ≥5 no_trigger fixtures.
+
+### 8.6 Performance tests
+
+Migration tooling must be fast even on large plan files.
+
+- Plan parse: 10,000-change plan file parses in < 500ms
+- `stitch status` on 1,000-change deployed project: < 1s (single query, not N queries)
+- Analysis: 1,000-line migration SQL analyzed in < 200ms
+- `stitch log` with 10,000 entries: < 2s (pagination by default)
+
+Run on every release, not every commit.
+
+### 8.7 CI configuration
 
 ```yaml
 # .github/workflows/ci.yml
-strategy:
-  matrix:
-    pg: [14, 15, 16, 17, 18]
-    os: [ubuntu-latest, macos-latest]
+
+on: [push, pull_request]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun test tests/unit/
+
+  integration:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pg: ["14", "15", "16", "17", "18"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}
+        env:
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun test tests/integration/
+        env:
+          PGPASSWORD: test
+          PGHOST: localhost
+
+  compat:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pg: ["14", "15", "16", "17", "18"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}
+        env:
+          POSTGRES_PASSWORD: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: docker pull sqitch/sqitch:latest
+      - run: bun install
+      - run: bun test tests/compat/
+        env:
+          PGPASSWORD: test
+          PGHOST: localhost
+          SQITCH_IMAGE: sqitch/sqitch:latest
+
+  analysis:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pg: ["14", "17"]   # oldest + newest for version-aware rules
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun test tests/analysis/
+
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun run build
+      - run: ./dist/stitch --version
 ```
+
+**CI policy:**
+- All jobs must pass before merge to `main`
+- `compat` job is the gate — no merge if Sqitch oracle tests fail
+- Performance tests run on release tags only
+- Test coverage reported to codecov
+
+### 8.8 Local development
+
+```bash
+# Run all tests locally
+bun test
+
+# Run only unit tests (fast, no Docker needed)
+bun test tests/unit/
+
+# Run integration tests against local PG
+PGURI=postgres://postgres:test@localhost/stitch_test bun test tests/integration/
+
+# Run Sqitch compat tests (requires Docker)
+bun test tests/compat/
+
+# Run a specific rule's analysis tests
+bun test tests/analysis/SA001
+
+# Run the full matrix (slow — use before release)
+bash scripts/test-matrix.sh
+```
+
+`docker-compose.yml` in repo root spins up PG 14–18 on ports 5414–5418 for local matrix testing.
 
 ---
 
