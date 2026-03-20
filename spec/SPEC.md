@@ -1,6 +1,6 @@
 # stitch — Product Specification
 
-- **Version:** 0.6.1 (draft)
+- **Version:** 0.6.2 (draft)
 - **Status:** Pre-development — spec review in progress, no implementation yet
 - **License:** Apache 2.0
 - **Changelog:** [SPEC-CHANGELOG.md](SPEC-CHANGELOG.md)
@@ -748,11 +748,14 @@ The expand/contract pattern requires application-side changes. stitch never auto
 
 No lock files, no local state files, no `.stitch/` directory with runtime state. Everything that matters (what's deployed, batch job state, expand/contract phase) lives in the database. This makes stitch safe to run from multiple machines (CI + developer laptop) without coordination.
 
-### DD9 — 3-partition queue, not SKIP LOCKED
+### DD9 — 3-partition queue with SKIP LOCKED
 
-For batched DML, we use a PGQ-style 3-partition rotating table rather than `SELECT ... FOR UPDATE SKIP LOCKED`. Reason: partition rotation provides automatic cleanup, explicit job state tracking, and visibility into queue depth without scanning all rows.
+For batched DML, we use a PGQ-style 3-partition rotating table with `SELECT ... FOR UPDATE SKIP LOCKED` for worker coordination. These are complementary, not alternatives:
 
-**OPEN:** The PGQ rotation model may not be a natural fit for job queues that need state updates, random access, and pause/resume. The stated reasons for rejecting `SKIP LOCKED` (cleanup, state tracking, depth visibility) can also be achieved with simpler designs (DELETE of completed jobs, status column, partial index on status). Revisit during implementation and validate the 3-partition approach against a simpler `SKIP LOCKED` design in a spike.
+- **3-partition rotation** solves **bloat and cleanup**. Completed batches accumulate dead tuples if removed via DELETE. Partition rotation allows TRUNCATE of an entire inactive partition — instant, zero bloat, no VACUUM pressure. The three partitions rotate: one active (receiving work), one being processed, one being truncated.
+- **SKIP LOCKED** solves **worker concurrency**. Multiple batch workers can dequeue from the active partition without blocking each other. `SELECT ... FOR UPDATE SKIP LOCKED` lets each worker grab the next available batch without waiting for locks held by other workers.
+
+This is the PGQ architecture: partition rotation for cleanup, lock-free dequeue within partitions. Job state tracking (pending/running/done/failed/dead), pause/resume, and progress monitoring are orthogonal — they use status columns and partial indexes within the active partitions.
 
 ### DD10 — No hidden network calls
 

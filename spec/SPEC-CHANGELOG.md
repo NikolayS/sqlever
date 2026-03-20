@@ -4,6 +4,10 @@ All notable changes to the stitch spec and codebase will be documented here.
 
 ## [Unreleased]
 
+## [SPEC 0.6.2] — 2026-03-20
+
+- **DD9: 3-partition queue WITH SKIP LOCKED, not vs.** These are complementary, not alternatives. Partition rotation solves bloat (TRUNCATE vs DELETE). SKIP LOCKED solves worker concurrency (lock-free dequeue). Removed the OPEN marker — the design is sound when both are used together as PGQ intended.
+
 ## [SPEC 0.6.1] — 2026-03-20
 
 Round 5 convergence check. All four expert domains confirmed CONVERGED.
