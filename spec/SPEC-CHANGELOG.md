@@ -4,6 +4,12 @@ All notable changes to the stitch spec and codebase will be documented here.
 
 ## [Unreleased]
 
+## [SPEC 0.6.1] — 2026-03-20
+
+Round 5 convergence check. All four expert domains confirmed CONVERGED.
+
+- Removed incorrect `dependencies_check` CHECK constraint from `sqitch.dependencies` DDL — actual Sqitch has no CHECK constraint on this table. `dependency_id` can be NULL for cross-project dependencies regardless of type, and NOT NULL for conflicts referencing known changes.
+
 ## [SPEC 0.6] — 2026-03-20
 
 Round 4 expert review findings addressed (convergence check). Same four reviewers. Surgical fixes — the spec is nearly converged. All reviewers confirmed zero critical behavioral issues with PG claims, no contradictions, and all OPEN markers remain appropriate.

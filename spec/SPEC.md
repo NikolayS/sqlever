@@ -1,6 +1,6 @@
 # stitch — Product Specification
 
-- **Version:** 0.6 (draft)
+- **Version:** 0.6.1 (draft)
 - **Status:** Pre-development — spec review in progress, no implementation yet
 - **License:** Apache 2.0
 - **Changelog:** [SPEC-CHANGELOG.md](SPEC-CHANGELOG.md)
@@ -299,11 +299,10 @@ CREATE TABLE sqitch.dependencies (
     type         TEXT NOT NULL,  -- 'require' or 'conflict'
     dependency   TEXT NOT NULL,
     dependency_id TEXT NULL REFERENCES sqitch.changes(change_id) ON UPDATE CASCADE,
-    PRIMARY KEY (change_id, dependency),
-    CONSTRAINT dependencies_check CHECK (
-        (type = 'require' AND dependency_id IS NOT NULL)
-        OR (type = 'conflict' AND dependency_id IS NULL)
-    )
+    PRIMARY KEY (change_id, dependency)
+    -- Note: Sqitch has no CHECK constraint on this table. dependency_id can be
+    -- NULL for cross-project dependencies regardless of type, and NOT NULL for
+    -- conflicts that reference known changes.
 );
 ```
 
