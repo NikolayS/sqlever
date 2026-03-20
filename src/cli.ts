@@ -3,6 +3,7 @@
 
 import packageJson from "../package.json";
 import { runInit } from "./commands/init";
+import { runStatus } from "./commands/status";
 import { setConfig, type OutputFormat } from "./output";
 import { parseAddArgs, runAdd } from "./commands/add";
 import { runLogCommand } from "./commands/log";
@@ -354,6 +355,14 @@ export function main(argv: string[] = process.argv.slice(2)): void {
       process.stderr.write(`sqlever show: ${msg}\n`);
       process.exit(1);
     }
+    return;
+  }
+
+  if (args.command === "status") {
+    runStatus(args).catch((err: unknown) => {
+      process.stderr.write(`sqlever status: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
+    });
     return;
   }
 
