@@ -6,6 +6,7 @@ import { runInit } from "./commands/init";
 import { setConfig, type OutputFormat } from "./output";
 import { parseAddArgs, runAdd } from "./commands/add";
 import { runLogCommand } from "./commands/log";
+import { runRevert } from "./commands/revert";
 
 // ---------------------------------------------------------------------------
 // Command registry — all commands from SPEC R1 plus sqlever extensions
@@ -305,6 +306,15 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   if (args.command === "log") {
     runLogCommand(args).catch((err: unknown) => {
       process.stderr.write(`sqlever log: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
+    });
+    return;
+  }
+
+  if (args.command === "revert") {
+    runRevert(args).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`sqlever revert: ${msg}\n`);
       process.exit(1);
     });
     return;

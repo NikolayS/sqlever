@@ -473,6 +473,37 @@ export class Registry {
     ]);
   }
 
+  /**
+   * Record a 'fail' event: insert into events only (no changes/deps deleted).
+   *
+   * Used when a revert script raises an exception. The change remains
+   * deployed, but the failure is logged in the event table for auditing.
+   */
+  async recordFailEvent(input: RecordDeployInput): Promise<void> {
+    await this.db.query(
+      `INSERT INTO sqitch.events (event, change_id, change, project, note,
+                                  requires, conflicts, tags,
+                                  committer_name, committer_email,
+                                  planned_at, planner_name, planner_email)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        "fail",
+        input.change_id,
+        input.change,
+        input.project,
+        input.note,
+        input.requires,
+        input.conflicts,
+        input.tags,
+        input.committer_name,
+        input.committer_email,
+        input.planned_at,
+        input.planner_name,
+        input.planner_email,
+      ],
+    );
+  }
+
   // -----------------------------------------------------------------------
   // Events
   // -----------------------------------------------------------------------
