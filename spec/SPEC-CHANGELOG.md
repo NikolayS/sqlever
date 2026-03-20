@@ -4,6 +4,10 @@ All notable changes to the stitch spec and codebase will be documented here.
 
 ## [Unreleased]
 
+## [SPEC 0.7] — 2026-03-20
+
+- **DD12 RESOLVED: Shell out to psql.** 100% psql metacommand compatibility — no subset, no reimplementation. `\i`, `\ir`, `\set`, `\copy`, `\if` all work exactly as in Sqitch. `node-postgres` used only for stitch's own DB operations (tracking tables, advisory locks, introspection, batch DML). This was the last major OPEN blocking implementation.
+
 ## [SPEC 0.6.2] — 2026-03-20
 
 - **DD9: 3-partition queue WITH SKIP LOCKED, not vs.** These are complementary, not alternatives. Partition rotation solves bloat (TRUNCATE vs DELETE). SKIP LOCKED solves worker concurrency (lock-free dequeue). Removed the OPEN marker — the design is sound when both are used together as PGQ intended.

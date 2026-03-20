@@ -1,6 +1,6 @@
 # stitch — Product Specification
 
-- **Version:** 0.6.2 (draft)
+- **Version:** 0.7 (draft)
 - **Status:** Pre-development — spec review in progress, no implementation yet
 - **License:** Apache 2.0
 - **Changelog:** [SPEC-CHANGELOG.md](SPEC-CHANGELOG.md)
@@ -775,15 +775,16 @@ We maintain a corpus of real-world Sqitch projects as test fixtures (anonymized 
 
 Sqitch also sets `ON_ERROR_STOP=1` when invoking psql, which aborts on the first error. It disables `.psqlrc` via environment variables.
 
-**Decision: OPEN.** This is the most consequential architecture decision in the project. Three options:
+**Decision: Shell out to psql.** Like Sqitch, stitch executes migration scripts by invoking `psql`. This guarantees 100% compatibility with all psql metacommands (`\i`, `\ir`, `\set`, `\copy`, `\if`/`\elif`/`\endif`, `\echo`, `\gset`, etc.) — no subset, no reimplementation, no compatibility gaps.
 
-**(a) Shell out to psql (like Sqitch).** Full compatibility. psql must be installed on the deploy machine. The `--db-client` flag specifies the psql path. This is what Sqitch does and is the safest path to compatibility. Drawback: requires psql binary, limits control over execution, complicates error handling.
+**Implications:**
+- psql must be installed on the deploy machine. The `--db-client` flag specifies the psql path (default: `psql` from `$PATH`).
+- stitch sets `ON_ERROR_STOP=1`, disables `.psqlrc` (via `PSQLRC=/dev/null` and `--no-psqlrc`), and passes `--single-transaction` or not depending on `--mode` and `--no-transaction`.
+- `--set key=value` is passed directly to psql as `-v key=value`, preserving full psql variable interpolation (`:variable`, `:'variable'`, `:{?variable}`).
+- Error handling: stitch parses psql's stderr for error messages and exit code for success/failure. Structured error extraction is best-effort — psql does not emit machine-readable errors.
+- `node-postgres` (`pg` package) is still used for tracking table operations (`sqitch.*`, `stitch.*`), advisory locks, schema introspection, and batch DML. It is NOT used for executing migration scripts.
 
-**(b) Use node-postgres with a psql metacommand pre-processing layer.** Parse migration scripts for psql metacommands before execution. Handle `\i`/`\ir` (inline the included file), `\set` (variable substitution), strip `\echo`/`\timing`, error on unsupported commands (`\copy`, `\if`). This gives stitch full control over execution but is a significant implementation effort and will inevitably have compatibility gaps.
-
-**(c) Support both modes.** Default to psql (full compat), with a `--engine native` flag that uses node-postgres directly (faster, no psql dependency, but limited metacommand support). Scripts using only standard SQL work in both modes.
-
-Resolve before Sprint 2 (plan + tracking). This decision affects the data flow, error handling, `--mode` transaction semantics, `ON_ERROR_STOP` behavior, `--set` variable substitution, and snapshot includes.
+This cleanly separates concerns: psql runs user SQL (with full metacommand support), `pg` manages stitch's own database state.
 
 **`--mode` transaction semantics (depends on DD12):**
 - `change` mode (default): each change in its own transaction.
@@ -1362,7 +1363,7 @@ Core infrastructure. Nothing user-visible yet.
 - [ ] `src/db/client.ts`: pg connection wrapper, URI parsing (`db:pg:` and `postgresql://`), error handling
 - [ ] `src/output.ts`: shared print/error/json output helpers
 - [ ] `src/cli.ts`: command router with `--help`, `--version`, `--format`
-- [ ] **Resolve DD12 (psql vs node-postgres execution model)** — spike both approaches, decide before Phase 1
+- [ ] **DD12 resolved: psql execution model** — implement psql shell-out wrapper: invoke psql with `ON_ERROR_STOP=1`, `--no-psqlrc`, `-v` for `--set` variables, parse stderr for errors, handle exit codes
 
 ### Phase 1 — Sqitch parity (Sprint 2–4, ~3 weeks)
 
