@@ -74,7 +74,13 @@ export function parseRevertOptions(args: ParsedArgs): RevertOptions {
     const token = rest[i]!;
 
     if (token === "--to") {
-      opts.toChange = rest[++i];
+      const nextVal = rest[++i];
+      if (nextVal === undefined || nextVal.startsWith("-")) {
+        throw new Error(
+          "Missing value for --to. Usage: revert --to <change>",
+        );
+      }
+      opts.toChange = nextVal;
       i++;
       continue;
     }
@@ -279,7 +285,7 @@ export async function runRevert(
     psqlRunner?: PsqlRunner;
     stdin?: NodeJS.ReadStream & { isTTY?: boolean };
   },
-): Promise<void> {
+): Promise<number> {
   const options = parseRevertOptions(args);
   const topDir = resolve(options.topDir);
 
@@ -298,7 +304,7 @@ export async function runRevert(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logError(`Failed to read plan file: ${msg}`);
-    process.exit(1);
+    return 1;
   }
 
   // Resolve target URI
@@ -307,7 +313,7 @@ export async function runRevert(
     logError(
       "No database target specified. Use --db-uri or configure a target in sqitch.conf.",
     );
-    process.exit(1);
+    return 1;
   }
 
   // 2. Connect to database
@@ -346,7 +352,7 @@ export async function runRevert(
       logError(
         "Another deploy/revert operation is in progress. Aborting.",
       );
-      process.exit(EXIT_CODE_CONCURRENT);
+      return EXIT_CODE_CONCURRENT;
     }
 
     // 4. Read deployed changes
@@ -354,7 +360,7 @@ export async function runRevert(
 
     if (deployedChanges.length === 0) {
       info("Nothing to revert. No changes are deployed.");
-      return;
+      return 0;
     }
 
     // 5. Compute changes to revert
@@ -367,12 +373,12 @@ export async function runRevert(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logError(msg);
-      process.exit(1);
+      return 1;
     }
 
     if (changesToRevert.length === 0) {
       info("Nothing to revert.");
-      return;
+      return 0;
     }
 
     // Build revertable change list with script paths and plan metadata
@@ -399,7 +405,7 @@ export async function runRevert(
     );
     if (!confirmed) {
       info("Revert cancelled.");
-      process.exit(0);
+      return 0;
     }
 
     // 7. Execute reverts
@@ -465,10 +471,11 @@ export async function runRevert(
       logError(
         `Revert incomplete: ${successCount} reverted, ${failCount} failed.`,
       );
-      process.exit(1);
+      return 1;
     }
 
     info(`Revert complete: ${successCount} change(s) reverted.`);
+    return 0;
   } finally {
     // 9. Release advisory lock (always)
     if (lockAcquired) {
