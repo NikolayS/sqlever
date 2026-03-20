@@ -1,0 +1,24 @@
+# docker-compose.yml — PostgreSQL for integration tests
+#
+# Usage:
+#   docker compose up -d        # start PG in the background
+#   bun test tests/integration/ # run integration tests
+#   docker compose down -v      # stop PG and remove data volume
+#
+# Port 5417 avoids conflicts with any local PostgreSQL on the default 5432.
+
+services:
+  postgres:
+    image: postgres:17
+    ports:
+      - "5417:5432"
+    environment:
+      POSTGRES_PASSWORD: test
+      POSTGRES_USER: postgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data
