@@ -106,6 +106,27 @@ function dockerAvailable(): boolean {
   }
 }
 
+async function pgAvailable(): Promise<boolean> {
+  const { createConnection } = await import("node:net");
+  return new Promise<boolean>((resolve) => {
+    const socket = createConnection(
+      { host: PG_HOST, port: PG_PORT, timeout: 2_000 },
+      () => {
+        socket.destroy();
+        resolve(true);
+      },
+    );
+    socket.on("error", () => resolve(false));
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
+const hasDocker = dockerAvailable();
+const hasPg = await pgAvailable();
+
 /** Run Sqitch via Docker against the host-network PG. */
 function runSqitch(projectDir: string, args: string[]): string {
   // Mount the project dir into the container; use host networking so
@@ -573,29 +594,17 @@ function assertTimestampClose(
 // Test suite
 // ---------------------------------------------------------------------------
 
-describe("compat: sqitch oracle", () => {
+describe.skipIf(!hasDocker || !hasPg)("compat: sqitch oracle", () => {
   let projectDir: string;
   const sqitchDb = "oracle_sqitch";
   const sqleverDb = "oracle_sqlever";
-  let skipReason: string | null = null;
 
   beforeAll(async () => {
-    // Pre-flight checks
-    if (!dockerAvailable()) {
-      skipReason = "Docker not available";
-      return;
-    }
-
     // Pull Sqitch image (may take a while the first time)
-    try {
-      execSync("docker pull sqitch/sqitch:latest", {
-        stdio: "ignore",
-        timeout: 120_000,
-      });
-    } catch {
-      skipReason = "Cannot pull sqitch/sqitch:latest";
-      return;
-    }
+    execSync("docker pull sqitch/sqitch:latest", {
+      stdio: "ignore",
+      timeout: 120_000,
+    });
 
     // Create temp project directory
     projectDir = await mkdtemp(join(tmpdir(), "sqlever-oracle-"));
@@ -633,7 +642,7 @@ describe("compat: sqitch oracle", () => {
   // -------------------------------------------------------------------------
 
   test("changes: row count matches", async () => {
-    if (skipReason) return;
+
     const sqitchChanges = await queryDb<ChangeRow>(
       sqitchDb,
       "SELECT * FROM sqitch.changes ORDER BY committed_at, change",
@@ -650,7 +659,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("changes: change_id values match", async () => {
-    if (skipReason) return;
+
     const sqitchIds = await queryDb<{ change_id: string }>(
       sqitchDb,
       "SELECT change_id FROM sqitch.changes ORDER BY committed_at, change",
@@ -665,7 +674,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("changes: change names match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ change: string }>(
       sqitchDb,
       "SELECT change FROM sqitch.changes ORDER BY committed_at, change",
@@ -680,7 +689,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("changes: project values match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ project: string }>(
       sqitchDb,
       "SELECT project FROM sqitch.changes ORDER BY committed_at, change",
@@ -695,7 +704,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("changes: note values match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ note: string }>(
       sqitchDb,
       "SELECT note FROM sqitch.changes ORDER BY committed_at, change_id",
@@ -710,7 +719,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("changes: script_hash values match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ change_id: string; script_hash: string | null }>(
       sqitchDb,
       "SELECT change_id, script_hash FROM sqitch.changes ORDER BY committed_at, change_id",
@@ -725,7 +734,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("changes: planner_name and planner_email match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ planner_name: string; planner_email: string }>(
       sqitchDb,
       "SELECT planner_name, planner_email FROM sqitch.changes ORDER BY committed_at, change_id",
@@ -741,7 +750,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("changes: planned_at timestamps match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ change_id: string; planned_at: Date }>(
       sqitchDb,
       "SELECT change_id, planned_at FROM sqitch.changes ORDER BY committed_at, change_id",
@@ -761,7 +770,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("changes: committer_name and committer_email match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ committer_name: string; committer_email: string }>(
       sqitchDb,
       "SELECT committer_name, committer_email FROM sqitch.changes ORDER BY committed_at, change_id",
@@ -781,7 +790,7 @@ describe("compat: sqitch oracle", () => {
   // -------------------------------------------------------------------------
 
   test("events: row count matches", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<EventRow>(
       sqitchDb,
       "SELECT * FROM sqitch.events ORDER BY committed_at, change_id",
@@ -794,7 +803,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("events: event types match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ event: string }>(
       sqitchDb,
       "SELECT event FROM sqitch.events ORDER BY committed_at, change_id",
@@ -809,7 +818,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("events: change_id values match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ change_id: string }>(
       sqitchDb,
       "SELECT change_id FROM sqitch.events ORDER BY committed_at, change_id",
@@ -824,7 +833,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("events: change names match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ change: string }>(
       sqitchDb,
       "SELECT change FROM sqitch.events ORDER BY committed_at, change_id",
@@ -839,7 +848,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("events: tags arrays match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ change_id: string; tags: string[] }>(
       sqitchDb,
       "SELECT change_id, tags FROM sqitch.events ORDER BY committed_at, change_id",
@@ -854,7 +863,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("events: requires arrays match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ change_id: string; requires: string[] }>(
       sqitchDb,
       "SELECT change_id, requires FROM sqitch.events ORDER BY committed_at, change_id",
@@ -869,7 +878,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("events: conflicts arrays match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ change_id: string; conflicts: string[] }>(
       sqitchDb,
       "SELECT change_id, conflicts FROM sqitch.events ORDER BY committed_at, change_id",
@@ -888,7 +897,7 @@ describe("compat: sqitch oracle", () => {
   // -------------------------------------------------------------------------
 
   test("tags: row count matches", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<TagRow>(
       sqitchDb,
       "SELECT * FROM sqitch.tags ORDER BY committed_at, tag",
@@ -902,7 +911,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("tags: tag_id values match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ tag_id: string }>(
       sqitchDb,
       "SELECT tag_id FROM sqitch.tags ORDER BY committed_at, tag",
@@ -917,7 +926,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("tags: tag names match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ tag: string }>(
       sqitchDb,
       "SELECT tag FROM sqitch.tags ORDER BY committed_at, tag",
@@ -932,7 +941,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("tags: change_id references match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ tag: string; change_id: string }>(
       sqitchDb,
       "SELECT tag, change_id FROM sqitch.tags ORDER BY committed_at, tag",
@@ -947,7 +956,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("tags: project values match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ project: string }>(
       sqitchDb,
       "SELECT project FROM sqitch.tags ORDER BY committed_at, tag",
@@ -962,7 +971,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("tags: planner_name and planner_email match", async () => {
-    if (skipReason) return;
+
     const sqitch = await queryDb<{ planner_name: string; planner_email: string }>(
       sqitchDb,
       "SELECT planner_name, planner_email FROM sqitch.tags ORDER BY committed_at, tag",
@@ -982,7 +991,7 @@ describe("compat: sqitch oracle", () => {
   // -------------------------------------------------------------------------
 
   test("every change has a deploy event", async () => {
-    if (skipReason) return;
+
     const sqleverChanges = await queryDb<{ change_id: string }>(
       sqleverDb,
       "SELECT change_id FROM sqitch.changes",
@@ -998,7 +1007,7 @@ describe("compat: sqitch oracle", () => {
   });
 
   test("application tables were created correctly by both tools", async () => {
-    if (skipReason) return;
+
     // Verify both databases have the same application tables
     const tablesQuery = `
       SELECT tablename FROM pg_tables
