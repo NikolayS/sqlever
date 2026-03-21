@@ -1,0 +1,210 @@
+{
+  "_comment": "Hand-computed SHA-1 values for Sqitch-compatible change/tag ID verification. Each entry specifies the full input and the expected 40-char hex ID.",
+
+  "first_change_no_uri": {
+    "input": {
+      "project": "compat",
+      "change": "bootstrap",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:00:00Z",
+      "requires": [],
+      "conflicts": [],
+      "note": ""
+    },
+    "expected_id": "f5abb43c365b611ccf0968e3e0f250c567197941"
+  },
+
+  "first_change_with_uri": {
+    "input": {
+      "project": "compat",
+      "uri": "https://example.com/compat",
+      "change": "bootstrap",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:00:00Z",
+      "requires": [],
+      "conflicts": [],
+      "note": ""
+    },
+    "expected_id": "abb4e0b31bef45fce3afa74816c48fc489779613"
+  },
+
+  "second_change_with_parent": {
+    "input": {
+      "project": "compat",
+      "change": "add_users",
+      "parent": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:01:00Z",
+      "requires": [],
+      "conflicts": [],
+      "note": ""
+    },
+    "expected_id": "beb07759db8ed811a9be170abe83ca24db5a8a28"
+  },
+
+  "with_requires": {
+    "input": {
+      "project": "compat",
+      "change": "add_posts",
+      "parent": "beb07759db8ed811a9be170abe83ca24db5a8a28",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:02:00Z",
+      "requires": ["bootstrap", "add_users"],
+      "conflicts": [],
+      "note": ""
+    },
+    "expected_id": "ea24b39bf81497e0b311efc26fc432a89945b3e6"
+  },
+
+  "with_conflicts": {
+    "input": {
+      "project": "compat",
+      "change": "new_auth",
+      "parent": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:03:00Z",
+      "requires": [],
+      "conflicts": ["old_auth"],
+      "note": ""
+    },
+    "expected_id": "c43438a75c50c82c79b8aa7525d607ed1d8e0484"
+  },
+
+  "with_both_requires_and_conflicts": {
+    "input": {
+      "project": "compat",
+      "change": "revamp_schema",
+      "parent": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:04:00Z",
+      "requires": ["bootstrap"],
+      "conflicts": ["legacy_schema"],
+      "note": ""
+    },
+    "expected_id": "3015be2698db3efccb7ba6110146bb0551572ea8"
+  },
+
+  "with_note": {
+    "input": {
+      "project": "compat",
+      "change": "add_indexes",
+      "parent": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:05:00Z",
+      "requires": [],
+      "conflicts": [],
+      "note": "Performance improvement for queries"
+    },
+    "expected_id": "295b31d61b0a26fdfa6ab3b901c73b6c49c54000"
+  },
+
+  "with_uri_and_note": {
+    "input": {
+      "project": "compat",
+      "uri": "https://example.com/compat",
+      "change": "add_indexes",
+      "parent": "abb4e0b31bef45fce3afa74816c48fc489779613",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:05:00Z",
+      "requires": [],
+      "conflicts": [],
+      "note": "Performance improvement for queries"
+    },
+    "expected_id": "7c262fb3944b59ef2b6220a88b005a0de65ca9f0"
+  },
+
+  "reworked_change": {
+    "input": {
+      "project": "compat",
+      "change": "bootstrap",
+      "parent": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-08-01T00:00:00Z",
+      "requires": ["bootstrap@v1.0"],
+      "conflicts": [],
+      "note": "Rework bootstrap for v2"
+    },
+    "expected_id": "5c8e2c3c016c9989f8f091a5b69219ff2faa0ea1"
+  },
+
+  "tag_with_note": {
+    "type": "tag",
+    "input": {
+      "project": "compat",
+      "tag": "v1.0",
+      "change_id": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T01:00:00Z",
+      "note": "First stable release"
+    },
+    "expected_id": "9129e554548e3a60f588094a8424e171eb41fd7b"
+  },
+
+  "tag_without_note": {
+    "type": "tag",
+    "input": {
+      "project": "compat",
+      "tag": "v0.1",
+      "change_id": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:30:00Z",
+      "note": ""
+    },
+    "expected_id": "189ce2e99273c86964057e286aa98a9d499517f6"
+  },
+
+  "planner_with_commas": {
+    "input": {
+      "project": "compat",
+      "change": "fix_typo",
+      "parent": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "Smith, John, Jr.",
+      "planner_email": "john@example.com",
+      "planned_at": "2024-07-04T00:06:00Z",
+      "requires": [],
+      "conflicts": [],
+      "note": ""
+    },
+    "expected_id": "cc6165881f0388e79dc38b836826bd4a2b531f90"
+  },
+
+  "cross_project_dep": {
+    "input": {
+      "project": "compat",
+      "change": "use_shared_types",
+      "parent": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:07:00Z",
+      "requires": ["shared:base_types"],
+      "conflicts": [],
+      "note": ""
+    },
+    "expected_id": "9f538078a0a3d7810f83dca19bccb74fc1ea448f"
+  },
+
+  "empty_note_equals_no_note": {
+    "input": {
+      "project": "compat",
+      "change": "same_thing",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:08:00Z",
+      "requires": [],
+      "conflicts": [],
+      "note": ""
+    },
+    "expected_id": "4a7197cd091266d1d23e350cd49578c299cd634d"
+  }
+}
