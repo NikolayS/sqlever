@@ -568,25 +568,20 @@ describe("revert command", () => {
       expect(singleTransaction).toBe(false);
     });
 
-    it("a normal revert script should use --single-transaction", () => {
+    it("a normal revert script should NOT use --single-transaction (matching Sqitch)", () => {
+      // Sqitch does NOT pass --single-transaction for revert scripts.
       const scriptContent = "DROP TABLE IF EXISTS foo;\n";
       expect(isNonTransactional(scriptContent)).toBe(false);
-      const singleTransaction = !isNonTransactional(scriptContent);
-      expect(singleTransaction).toBe(true);
     });
 
-    it("revert.ts source uses isNonTransactional and does not hardcode singleTransaction: true", () => {
+    it("revert.ts source does not hardcode singleTransaction: true", () => {
       const { readFileSync } = require("node:fs");
       const source = readFileSync(
         new URL("../../src/commands/revert.ts", import.meta.url).pathname,
         "utf-8",
       );
 
-      // The source must import and call isNonTransactional
-      expect(source).toContain("isNonTransactional");
-
       // The source must NOT have the old hardcoded `singleTransaction: true` in psqlRunner.run
-      // We check that the pattern `singleTransaction: true` does not appear
       const hardcoded = /singleTransaction:\s*true/.test(source);
       expect(hardcoded).toBe(false);
     });

@@ -633,7 +633,8 @@ export async function executeDeploy(
       }
 
       // Determine transaction mode for psql
-      const useSingleTransaction = !noTransaction && options.mode === "change";
+      // Sqitch does NOT pass --single-transaction by default.
+      const useSingleTransaction = !noTransaction && (options.mode === "all" || options.mode === "tag");
 
       // Mark change as running in TUI
       progress.updateChange(change.name, "running");

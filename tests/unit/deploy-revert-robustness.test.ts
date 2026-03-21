@@ -372,10 +372,10 @@ describe("deploy/revert robustness (issue #125)", () => {
       const result = await executeDeploy(options, deps);
 
       expect(result.deployed).toBe(2);
-      // Each invocation should have --single-transaction
+      // Sqitch does NOT pass --single-transaction by default.
       expect(calls.length).toBe(2);
-      expect(calls[0]!.args).toContain("--single-transaction");
-      expect(calls[1]!.args).toContain("--single-transaction");
+      expect(calls[0]!.args).not.toContain("--single-transaction");
+      expect(calls[1]!.args).not.toContain("--single-transaction");
     });
 
     it("--mode all is rejected as not-yet-implemented", () => {
@@ -410,9 +410,8 @@ describe("deploy/revert robustness (issue #125)", () => {
       const result = await executeDeploy(options, deps);
 
       expect(result.deployed).toBe(2);
-      // First script: transactional
-      expect(calls[0]!.args).toContain("--single-transaction");
-      // Second script: non-transactional -- no --single-transaction
+      // Sqitch does NOT pass --single-transaction by default.
+      expect(calls[0]!.args).not.toContain("--single-transaction");
       expect(calls[1]!.args).not.toContain("--single-transaction");
     });
   });

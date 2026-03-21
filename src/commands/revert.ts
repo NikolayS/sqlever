@@ -435,7 +435,8 @@ export async function runRevert(
         break;
       }
 
-      const singleTransaction = !isNonTransactional(scriptContent);
+      // Sqitch does NOT pass --single-transaction for revert scripts.
+      const singleTransaction = false;
 
       let result: PsqlRunResult;
       try {

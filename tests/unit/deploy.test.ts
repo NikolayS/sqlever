@@ -831,11 +831,10 @@ add_index 2025-01-02T00:00:00Z Test User <test@example.com> # Concurrent index
 
       expect(result.deployed).toBe(2);
 
-      // First script (transactional) should have --single-transaction
+      // Sqitch does NOT pass --single-transaction by default.
       const firstCall = calls[0]!;
-      expect(firstCall.args).toContain("--single-transaction");
+      expect(firstCall.args).not.toContain("--single-transaction");
 
-      // Second script (non-transactional) should NOT have --single-transaction
       const secondCall = calls[1]!;
       expect(secondCall.args).not.toContain("--single-transaction");
     });

@@ -726,10 +726,8 @@ describe("deploy failure recovery", () => {
 
       expect(result.deployed).toBe(2);
 
-      // First call (create_schema): transactional => --single-transaction
-      expect(calls[0]!.args).toContain("--single-transaction");
-
-      // Second call (add_index): non-transactional => no --single-transaction
+      // Sqitch does NOT pass --single-transaction by default.
+      expect(calls[0]!.args).not.toContain("--single-transaction");
       expect(calls[1]!.args).not.toContain("--single-transaction");
     });
 
