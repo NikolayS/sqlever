@@ -51,6 +51,7 @@ const {
   EXIT_CODE_CONCURRENT,
 } = await import("../../src/commands/revert");
 const { parseArgs } = await import("../../src/cli");
+const { isNonTransactional } = await import("../../src/commands/deploy");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -551,6 +552,43 @@ describe("revert command", () => {
       const args = parseArgs(["revert", "--to", "my_change"]);
       const opts = parseRevertOptions(args);
       expect(opts.toChange).toBe("my_change");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Bug fix: revert ignores -- sqlever:no-transaction directive
+  // -----------------------------------------------------------------------
+
+  describe("revert respects -- sqlever:no-transaction directive", () => {
+    it("a revert script with -- sqlever:no-transaction should NOT use --single-transaction", () => {
+      const scriptContent = "-- sqlever:no-transaction\nDROP INDEX CONCURRENTLY IF EXISTS idx_foo;\n";
+      expect(isNonTransactional(scriptContent)).toBe(true);
+      // singleTransaction should be !isNonTransactional = false
+      const singleTransaction = !isNonTransactional(scriptContent);
+      expect(singleTransaction).toBe(false);
+    });
+
+    it("a normal revert script should use --single-transaction", () => {
+      const scriptContent = "DROP TABLE IF EXISTS foo;\n";
+      expect(isNonTransactional(scriptContent)).toBe(false);
+      const singleTransaction = !isNonTransactional(scriptContent);
+      expect(singleTransaction).toBe(true);
+    });
+
+    it("revert.ts source uses isNonTransactional and does not hardcode singleTransaction: true", () => {
+      const { readFileSync } = require("node:fs");
+      const source = readFileSync(
+        new URL("../../src/commands/revert.ts", import.meta.url).pathname,
+        "utf-8",
+      );
+
+      // The source must import and call isNonTransactional
+      expect(source).toContain("isNonTransactional");
+
+      // The source must NOT have the old hardcoded `singleTransaction: true` in psqlRunner.run
+      // We check that the pattern `singleTransaction: true` does not appear
+      const hardcoded = /singleTransaction:\s*true/.test(source);
+      expect(hardcoded).toBe(false);
     });
   });
 
