@@ -33,6 +33,7 @@ import {
   queryDb,
   pgUri,
   runSqlever,
+  hasPg,
 } from "./helpers";
 import { parsePlan } from "../../src/plan/parser";
 import type { Plan, Change } from "../../src/plan/types";
@@ -254,7 +255,7 @@ describe("test project plan parsing", () => {
 // Section 3: Deploy test project against real PG and verify tracking
 // ---------------------------------------------------------------------------
 
-describe("customer-zero deploy against real PG", () => {
+describe.skipIf(!hasPg)("customer-zero deploy against real PG", () => {
   let dbName: string;
   let tmpDir: string;
 

@@ -27,6 +27,7 @@ import {
   runSqlever,
   queryDb,
   pgUri,
+  hasPg,
 } from "../integration/helpers";
 
 // ---------------------------------------------------------------------------
@@ -182,7 +183,7 @@ function ensureSqitchImage(): void {
 
 const hasDocker = dockerAvailable();
 
-describe.skipIf(!hasDocker)("compat: mid-deploy handoff", () => {
+describe.skipIf(!hasDocker || !hasPg)("compat: mid-deploy handoff", () => {
   let tmpDir: string;
   let dbName: string;
 

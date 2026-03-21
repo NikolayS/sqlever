@@ -18,6 +18,7 @@ import {
   runSqlever,
   queryDb,
   pgUri,
+  hasPg,
 } from "./helpers";
 
 // ---------------------------------------------------------------------------
@@ -32,7 +33,7 @@ async function makeTempDir(): Promise<string> {
 // Sanity checks for the test helpers themselves
 // ---------------------------------------------------------------------------
 
-describe("integration helpers", () => {
+describe.skipIf(!hasPg)("integration helpers", () => {
   let dbName: string;
 
   beforeEach(async () => {
@@ -113,7 +114,7 @@ describe("integration: init + add", () => {
 // Full lifecycle: init → add → deploy → verify → status → revert
 // ---------------------------------------------------------------------------
 
-describe("integration: full lifecycle", () => {
+describe.skipIf(!hasPg)("integration: full lifecycle", () => {
   let tmpDir: string;
   let dbName: string;
 

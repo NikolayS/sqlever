@@ -157,6 +157,46 @@ export async function runSqlever(
 }
 
 // ---------------------------------------------------------------------------
+// PG availability check
+// ---------------------------------------------------------------------------
+
+/**
+ * Check whether the test PostgreSQL instance is reachable.
+ *
+ * Uses a raw TCP socket probe instead of the `pg` client library to avoid
+ * false positives when `pg/lib/client` is mocked by unit tests (e.g.,
+ * client.test.ts uses `mock.module("pg/lib/client", ...)` which would make
+ * the pg Client `connect()` silently succeed even without a real PG).
+ */
+export async function checkPgAvailable(): Promise<boolean> {
+  const { createConnection } = await import("node:net");
+  return new Promise<boolean>((resolve) => {
+    const socket = createConnection(
+      { host: PG_HOST, port: PG_PORT, timeout: 2_000 },
+      () => {
+        // TCP connection succeeded — PG port is listening
+        socket.destroy();
+        resolve(true);
+      },
+    );
+    socket.on("error", () => resolve(false));
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Eagerly-evaluated PG availability flag.
+ *
+ * Usage:
+ *   import { hasPg } from "./helpers";
+ *   describe.skipIf(!hasPg)("my PG tests", () => { ... });
+ */
+export const hasPg: boolean = await checkPgAvailable();
+
+// ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
 
