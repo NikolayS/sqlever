@@ -154,13 +154,15 @@ describe("customer-zero plan parsing", () => {
     const content = readFileSync(CUSTOMER_ZERO_PLAN, "utf-8");
     plan = parsePlan(content);
 
-    // Change 44 (0-indexed 39) has a note with literal \n in it
+    // Change 44 (0-indexed 39) has a note with literal \n in the plan file
+    // which is unescaped to an actual newline by the parser (matching Sqitch behavior)
     const billingImprovements = plan.changes.find(
       (c) => c.name === "20200907_billing_impovements",
     );
     expect(billingImprovements).toBeDefined();
-    // The note contains a literal \n (two chars: backslash + n), not a newline
-    expect(billingImprovements!.note).toContain("\\n");
+    // The note contains an actual newline (0x0a), not the two-char sequence \n
+    expect(billingImprovements!.note).toContain("\n");
+    expect(billingImprovements!.note).not.toContain("\\n");
   });
 
   test("handles notes with hash-without-space separator", () => {
@@ -245,7 +247,8 @@ describe("test project plan parsing", () => {
 
     const notes = plan.changes[4]!;
     expect(notes.note).toContain('"quotes"');
-    expect(notes.note).toContain("\\n\\t");
+    // \n and \t in the plan file are unescaped to actual newline/tab
+    expect(notes.note).toContain("\n\t");
     expect(notes.note).toContain("& ampersands");
     expect(notes.note).toContain("<angle>");
   });

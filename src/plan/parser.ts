@@ -41,6 +41,25 @@ export class PlanParseError extends Error {
 // ---------------------------------------------------------------------------
 
 /**
+ * Unescape plan note text to match Sqitch's Perl behavior.
+ *
+ * Sqitch's Perl parser interprets escape sequences in notes:
+ *   \n  → newline (0x0a)
+ *   \t  → tab (0x09)
+ *   \\  → literal backslash
+ *
+ * Uses a single-pass replacement to handle sequences like `\\n` correctly
+ * (two backslashes followed by n → literal backslash + "n", not a newline).
+ */
+function unescapeNote(note: string): string {
+  return note.replace(/\\([nt\\])/g, (_, ch: string) => {
+    if (ch === "n") return "\n";
+    if (ch === "t") return "\t";
+    return "\\";
+  });
+}
+
+/**
  * Parse a pragma line: `%key=value`
  */
 function parsePragma(line: string): [string, string] {
@@ -196,6 +215,8 @@ function parseEntry(line: string, lineNum: number): ParsedEntry {
     note = afterEmail.slice(hashIdx + 1).trimStart();
     // Also trim trailing whitespace
     note = note.trimEnd();
+    // Unescape \n, \t, \\ to match Sqitch's Perl behavior
+    note = unescapeNote(note);
   }
 
   return {

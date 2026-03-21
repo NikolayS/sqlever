@@ -631,14 +631,15 @@ describe("parsePlan — edge cases", () => {
 
   it("handles escaped newline in note from customer-zero", () => {
     // This is the raw literal from customer-zero line 44:
-    // The note contains literal \n characters (not actual newlines)
+    // The plan file contains literal \n which Sqitch's Perl parser
+    // interprets as an actual newline character (0x0a).
     const plan = parsePlan(
       minimalPlan([
         String.raw`my_change 2024-01-15T10:30:00Z A <a@b.com> # Logging imrovements, some fixes.\nPlease enter a note`,
       ]),
     );
     expect(plan.changes[0]!.note).toBe(
-      String.raw`Logging imrovements, some fixes.\nPlease enter a note`,
+      "Logging imrovements, some fixes.\nPlease enter a note",
     );
   });
 
@@ -877,13 +878,15 @@ describe("customer-zero fixture", () => {
     expect(plan.tags).toHaveLength(0);
   });
 
-  it("parses the literal backslash-n in note on line 44", () => {
+  it("unescapes backslash-n in note on line 44 to actual newline", () => {
     const plan = parsePlan(content);
     const change = plan.changes.find(
       (c) => c.name === "20200907_billing_impovements",
     );
     expect(change).toBeDefined();
-    expect(change!.note).toContain(String.raw`\n`);
+    // Sqitch's Perl parser interprets \n as actual newline (0x0a)
+    expect(change!.note).toContain("\n");
+    expect(change!.note).not.toContain(String.raw`\n`);
     expect(change!.note).toContain("Please enter a note");
   });
 });

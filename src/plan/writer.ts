@@ -15,6 +15,25 @@ import { readFile, appendFile } from "node:fs/promises";
 import type { Plan, Change, Tag } from "./types";
 
 // ---------------------------------------------------------------------------
+// Note escaping — reverse of parser's unescapeNote
+// ---------------------------------------------------------------------------
+
+/**
+ * Escape note text for the plan file format.
+ *
+ * Reverses the parser's unescaping so that round-trip
+ * parse → serialize → parse produces identical Plan objects.
+ *
+ * Must escape `\` first to avoid double-escaping newlines/tabs.
+ */
+function escapeNote(note: string): string {
+  return note
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/\t/g, "\\t");
+}
+
+// ---------------------------------------------------------------------------
 // Serialization — individual entries
 // ---------------------------------------------------------------------------
 
@@ -42,7 +61,7 @@ export function serializeChange(change: Change): string {
   parts.push(`${change.planner_name} <${change.planner_email}>`);
 
   if (change.note !== "") {
-    parts.push(`# ${change.note}`);
+    parts.push(`# ${escapeNote(change.note)}`);
   }
 
   return parts.join(" ");
@@ -62,7 +81,7 @@ export function serializeTag(tag: Tag): string {
   parts.push(`${tag.planner_name} <${tag.planner_email}>`);
 
   if (tag.note !== "") {
-    parts.push(`# ${tag.note}`);
+    parts.push(`# ${escapeNote(tag.note)}`);
   }
 
   return parts.join(" ");
