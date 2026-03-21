@@ -18,7 +18,7 @@
 // Timestamp tolerance: 5 seconds (committed_at will differ between runs)
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -609,8 +609,12 @@ describe.skipIf(!hasDocker || !hasPg)("compat: sqitch oracle", () => {
       timeout: 120_000,
     });
 
-    // Create temp project directory
+    // Create temp project directory.
+    // mkdtemp uses 0700 permissions; the sqitch Docker image runs as
+    // uid 1024 (sqitch) which can't traverse a 0700 directory owned by
+    // the host user. Widen to 0755 so the bind-mount is readable.
     projectDir = await mkdtemp(join(tmpdir(), "sqlever-oracle-"));
+    await chmod(projectDir, 0o755);
 
     // Create both databases
     await createDb(sqitchDb);

@@ -16,7 +16,7 @@
 //   - PostgreSQL reachable at localhost:5417 (docker compose up)
 
 import { describe, test, expect, beforeEach, afterEach, beforeAll } from "bun:test";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -52,7 +52,12 @@ function sqitchDbUri(dbName: string): string {
 // ---------------------------------------------------------------------------
 
 async function makeTempDir(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "sqlever-handoff-"));
+  const dir = await mkdtemp(join(tmpdir(), "sqlever-handoff-"));
+  // mkdtemp creates directories with 0700 permissions. The sqitch Docker
+  // image runs as uid 1024 (sqitch), which can't traverse a 0700 directory
+  // owned by the host user. Open it up so Docker can read the mounted files.
+  await chmod(dir, 0o755);
+  return dir;
 }
 
 /**
@@ -213,9 +218,13 @@ describe.skipIf(!hasDocker || !hasPg)("compat: mid-deploy handoff", () => {
 
     // We need to update sqitch.conf to set the engine target for Sqitch.
     // Sqitch Docker needs a db:pg:// URI via its config.
+    // Also strip the absolute top_dir that sqlever init writes — inside the
+    // Docker container the project is mounted at /repo (the cwd), so
+    // top_dir must be "." (the default when omitted).
     const confPath = join(tmpDir, "sqitch.conf");
     const existingConf = await readFile(confPath, "utf-8");
-    const updatedConf = existingConf + `
+    const cleanedConf = existingConf.replace(/^\s*top_dir\s*=.*$/m, "");
+    const updatedConf = cleanedConf + `
 [engine "pg"]
 \ttarget = ${dockerDbUri}
 `;
@@ -312,10 +321,12 @@ describe.skipIf(!hasDocker || !hasPg)("compat: mid-deploy handoff", () => {
     const dockerDbUri = sqitchDbUri(dbName);
     const localDbUri = pgUri(dbName);
 
-    // Update sqitch.conf with engine target for Sqitch
+    // Update sqitch.conf with engine target for Sqitch.
+    // Strip absolute top_dir — Docker mounts the project at /repo (cwd).
     const confPath = join(tmpDir, "sqitch.conf");
     const existingConf = await readFile(confPath, "utf-8");
-    const updatedConf = existingConf + `
+    const cleanedConf = existingConf.replace(/^\s*top_dir\s*=.*$/m, "");
+    const updatedConf = cleanedConf + `
 [engine "pg"]
 \ttarget = ${dockerDbUri}
 `;
