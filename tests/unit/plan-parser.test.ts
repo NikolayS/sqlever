@@ -278,13 +278,15 @@ describe("parsePlan — change parsing", () => {
     expect(plan.changes[0]!.note).toBe("no space note");
   });
 
-  it("handles double space before <email>", () => {
+  it("handles double space before <email> (trailing space preserved per Sqitch)", () => {
     const plan = parsePlan(
       minimalPlan([
         "my_change 2024-01-15T10:30:00Z User Name  <u@e.com> # note",
       ]),
     );
-    expect(plan.changes[0]!.planner_name).toBe("User Name");
+    // Sqitch regex: [^<]+ (greedy) [[:blank:]]+ (>=1) <email>
+    // With "User Name  <", [^<]+ captures "User Name " and [[:blank:]]+ gets " "
+    expect(plan.changes[0]!.planner_name).toBe("User Name ");
     expect(plan.changes[0]!.planner_email).toBe("u@e.com");
   });
 
@@ -811,12 +813,13 @@ describe("customer-zero fixture", () => {
     expect(change!.planner_email).toBe("sqitch@01157dfe3b0b");
   });
 
-  it("handles double space before email angle bracket", () => {
+  it("handles double space before email angle bracket (trailing space preserved)", () => {
     const plan = parsePlan(content);
     // Line 14: Dmitry Udalov  <dmius@postgres.ai>
+    // Sqitch's [^<]+ captures "Dmitry Udalov " (with trailing space)
     const change = plan.changes.find((c) => c.name === "20191114_dblab");
     expect(change).toBeDefined();
-    expect(change!.planner_name).toBe("Dmitry Udalov");
+    expect(change!.planner_name).toBe("Dmitry Udalov ");
   });
 
   it("handles note without space after #", () => {

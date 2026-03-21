@@ -175,7 +175,15 @@ function parseEntry(line: string, lineNum: number): ParsedEntry {
   }
 
   const plannerEmail = afterTs.slice(emailStartIdx + 1, emailEndIdx);
-  const plannerName = afterTs.slice(0, emailStartIdx).trim();
+  // Sqitch's regex: (?<planner_name>[^<]+)[[:blank:]]+<(?<planner_email>[^>]+)>
+  // [^<]+ is greedy, [[:blank:]]+ needs >=1 blank, so planner_name gets all
+  // chars before '<' except the final delimiter blank.  We replicate that by
+  // trimming leading whitespace (timestamp delimiter) and stripping exactly
+  // one trailing blank (the name/email delimiter).
+  const rawName = afterTs.slice(0, emailStartIdx).trimStart();
+  const plannerName = rawName.endsWith(" ") || rawName.endsWith("\t")
+    ? rawName.slice(0, -1)
+    : rawName;
 
   // Note is after the email closing >
   const afterEmail = afterTs.slice(emailEndIdx + 1);
