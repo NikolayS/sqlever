@@ -158,7 +158,7 @@ describe("buildSqitchConf", () => {
     expect(confGet(conf, "core.engine")).toBe("pg");
   });
 
-  test("non-default top_dir is included", () => {
+  test("top_dir is never written (sqitch.conf lives inside top_dir)", () => {
     const content = buildSqitchConf({
       projectName: "test",
       topDir: "migrations",
@@ -167,7 +167,9 @@ describe("buildSqitchConf", () => {
     });
 
     const conf = parseSqitchConf(content);
-    expect(confGet(conf, "core.top_dir")).toBe("migrations");
+    // sqitch.conf is placed inside the top directory, so relative
+    // top_dir is always "." and should be omitted.
+    expect(confGet(conf, "core.top_dir")).toBeUndefined();
   });
 
   test("default top_dir omits top_dir key", () => {
@@ -445,17 +447,15 @@ describe("sqlever init (filesystem)", () => {
     expect(deployStat.isDirectory()).toBe(true);
   });
 
-  test("sqitch.conf does not contain top_dir for default '.'", async () => {
-    // When --top-dir is used, the conf should reflect that,
-    // but the top_dir key should only appear if non-default.
-    // Since we run with --top-dir tempDir, top_dir IS non-default.
+  test("sqitch.conf never contains top_dir (conf lives inside top_dir)", async () => {
+    // sqitch.conf is always placed inside the --top-dir directory, so
+    // the relative top_dir is always "." and should be omitted.
     const { exitCode } = await runInit(tempDir, "myproject");
     expect(exitCode).toBe(0);
 
     const confContent = await readFile(join(tempDir, "sqitch.conf"), "utf-8");
-    // Since we passed --top-dir (a non-default dir), top_dir should appear
     const conf = parseSqitchConf(confContent);
-    expect(confGet(conf, "core.top_dir")).toBe(tempDir);
+    expect(confGet(conf, "core.top_dir")).toBeUndefined();
   });
 
   test("generated plan is valid and round-trips through serializePlan", async () => {

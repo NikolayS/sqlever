@@ -118,10 +118,11 @@ export function buildSqitchConf(options: InitOptions): string {
 
   confSet(conf, "core.engine", options.engine);
 
-  // Only write top_dir if it differs from default "."
-  if (options.topDir !== ".") {
-    confSet(conf, "core.top_dir", options.topDir);
-  }
+  // Never write top_dir: sqitch.conf is always placed inside the top
+  // directory (at join(topDir, "sqitch.conf")), so the relative top_dir
+  // is always ".".  Writing an absolute path here would cause loadConfig
+  // to produce absolute default paths (deploy_dir, plan_file, etc.) that
+  // get double-joined by consumer commands.
 
   // Only write plan_file if explicitly specified
   if (options.planFile !== undefined) {
