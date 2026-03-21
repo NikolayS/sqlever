@@ -16,6 +16,7 @@ import { runPlan } from "./commands/plan";
 import { runVerify } from "./commands/verify";
 import { parseAnalyzeArgs, runAnalyze } from "./commands/analyze";
 import { runDoctor } from "./commands/doctor";
+import { runDiff } from "./commands/diff";
 
 // ---------------------------------------------------------------------------
 // Command registry — all commands from SPEC R1 plus sqlever extensions
@@ -426,6 +427,15 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   if (args.command === "doctor") {
     const exitCode = runDoctor(args);
     if (exitCode !== 0) process.exit(exitCode);
+    return;
+  }
+
+  if (args.command === "diff") {
+    runDiff(args).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`sqlever diff: ${msg}\n`);
+      process.exit(1);
+    });
     return;
   }
 
