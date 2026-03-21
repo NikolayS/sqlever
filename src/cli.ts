@@ -15,6 +15,7 @@ import { parseShowArgs, runShow } from "./commands/show";
 import { runPlan } from "./commands/plan";
 import { runVerify } from "./commands/verify";
 import { parseAnalyzeArgs, runAnalyze } from "./commands/analyze";
+import { parseExplainArgs, runExplain } from "./commands/explain";
 import { runDoctor } from "./commands/doctor";
 import { runDiff } from "./commands/diff";
 
@@ -421,6 +422,14 @@ export function main(argv: string[] = process.argv.slice(2)): void {
     runAnalyze(analyzeOpts)
       .then((result) => { if (result.exitCode !== 0) process.exit(result.exitCode); })
       .catch((err: unknown) => { process.stderr.write(`sqlever analyze: ${err instanceof Error ? err.message : String(err)}\n`); process.exit(1); });
+    return;
+  }
+
+  if (args.command === "explain") {
+    const explainOpts = parseExplainArgs(args.rest);
+    runExplain(explainOpts)
+      .then((exitCode) => { if (exitCode !== 0) process.exit(exitCode); })
+      .catch((err: unknown) => { process.stderr.write(`sqlever explain: ${err instanceof Error ? err.message : String(err)}\n`); process.exit(1); });
     return;
   }
 
