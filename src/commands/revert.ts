@@ -27,6 +27,7 @@ import {
 import { PsqlRunner, type PsqlRunResult } from "../psql";
 import { ShutdownManager } from "../signals";
 import { info, error as logError, verbose } from "../output";
+import { isNonTransactional } from "./deploy";
 
 // ---------------------------------------------------------------------------
 // Exit codes (SPEC R6)
@@ -421,11 +422,26 @@ export async function runRevert(
 
       verbose(`Reverting: ${change.name}`);
 
+      // Read revert script to check for no-transaction directive
+      let scriptContent: string;
+      try {
+        scriptContent = readFileSync(change.revertScriptPath, "utf-8");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logError(`Failed to read revert script for '${change.name}': ${msg}`);
+        const failInput = buildRevertInput(change.deployed, change.planChange);
+        await safeRecordFail(registry, failInput, change.name);
+        failCount++;
+        break;
+      }
+
+      const singleTransaction = !isNonTransactional(scriptContent);
+
       let result: PsqlRunResult;
       try {
         result = await psqlRunner.run(change.revertScriptPath, {
           uri: targetUri,
-          singleTransaction: true,
+          singleTransaction,
           workingDir: topDir,
         });
       } catch (err) {
