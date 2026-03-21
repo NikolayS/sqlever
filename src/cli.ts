@@ -20,6 +20,7 @@ import { parseExplainArgs, runExplain } from "./commands/explain";
 import { runDoctor } from "./commands/doctor";
 import { runDiff } from "./commands/diff";
 import { parseReviewArgs, runReviewCommand } from "./commands/review";
+import { runBatch } from "./commands/batch";
 
 // ---------------------------------------------------------------------------
 // Command registry — all commands from SPEC R1 plus sqlever extensions
@@ -467,6 +468,15 @@ export function main(argv: string[] = process.argv.slice(2)): void {
     runReviewCommand(reviewOpts)
       .then((result) => { if (result.exitCode !== 0) process.exit(result.exitCode); })
       .catch((err: unknown) => { process.stderr.write(`sqlever review: ${err instanceof Error ? err.message : String(err)}\n`); process.exit(1); });
+    return;
+  }
+
+  if (args.command === "batch") {
+    runBatch(args).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`sqlever batch: ${msg}\n`);
+      process.exit(1);
+    });
     return;
   }
 
