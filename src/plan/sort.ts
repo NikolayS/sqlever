@@ -60,6 +60,22 @@ export class ConflictError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a dependency reference to a plain change name.
+ *
+ * Dependencies can use the `name@tag` syntax (e.g. "add_users@v1.0") to
+ * refer to a specific tagged version of a reworked change. For graph
+ * operations we only need the base change name.
+ */
+function resolveDepName(dep: string): string {
+  const atIdx = dep.indexOf("@");
+  return atIdx === -1 ? dep : dep.slice(0, atIdx);
+}
+
+// ---------------------------------------------------------------------------
 // Core functions
 // ---------------------------------------------------------------------------
 
@@ -80,11 +96,16 @@ export class ConflictError extends Error {
 export function topologicalSort(changes: Change[]): Change[] {
   if (changes.length === 0) return [];
 
-  // Build name -> index map for O(1) lookup
+  // Build name -> index map for O(1) lookup.
+  // For reworked changes (same name appears multiple times), keep the
+  // FIRST occurrence so that name@tag dependencies resolve to the
+  // original change, not the reworked one (which would create a self-loop).
   const nameToIndex = new Map<string, number>();
   for (let i = 0; i < changes.length; i++) {
     const c = changes[i]!;
-    nameToIndex.set(c.name, i);
+    if (!nameToIndex.has(c.name)) {
+      nameToIndex.set(c.name, i);
+    }
   }
 
   // Compute in-degree and adjacency (forward edges: dep -> dependant)
@@ -98,7 +119,8 @@ export function topologicalSort(changes: Change[]): Change[] {
   for (let i = 0; i < n; i++) {
     const c = changes[i]!;
     for (const req of c.requires) {
-      const depIdx = nameToIndex.get(req);
+      // Resolve name@tag references to plain change names
+      const depIdx = nameToIndex.get(resolveDepName(req));
       if (depIdx === undefined) {
         // External dependency (already deployed or validated separately)
         continue;
@@ -210,7 +232,7 @@ function findCyclePath(
         continue;
       }
 
-      const reqName = c.requires[frame.reqIdx]!;
+      const reqName = resolveDepName(c.requires[frame.reqIdx]!);
       frame.reqIdx++;
 
       const neighbor = nameToIndex.get(reqName);
@@ -263,16 +285,18 @@ export function validateDependencies(
   const changeNames = new Set(changes.map((c) => c.name));
 
   for (const change of changes) {
-    // Check requires
+    // Check requires — resolve name@tag to base name
     for (const req of change.requires) {
-      if (!changeNames.has(req) && !deployedSet.has(req)) {
+      const baseName = resolveDepName(req);
+      if (!changeNames.has(baseName) && !deployedSet.has(baseName)) {
         throw new MissingDependencyError(change.name, req);
       }
     }
 
-    // Check conflicts
+    // Check conflicts — resolve name@tag to base name
     for (const conflict of change.conflicts) {
-      if (deployedSet.has(conflict)) {
+      const baseName = resolveDepName(conflict);
+      if (deployedSet.has(baseName)) {
         throw new ConflictError(change.name, conflict);
       }
     }
@@ -288,9 +312,12 @@ export function validateDependencies(
 export function detectCycles(changes: Change[]): CycleError | null {
   if (changes.length === 0) return null;
 
+  // First occurrence wins — same logic as topologicalSort
   const nameToIndex = new Map<string, number>();
   for (let i = 0; i < changes.length; i++) {
-    nameToIndex.set(changes[i]!.name, i);
+    if (!nameToIndex.has(changes[i]!.name)) {
+      nameToIndex.set(changes[i]!.name, i);
+    }
   }
 
   // DFS-based cycle detection
@@ -318,7 +345,7 @@ export function detectCycles(changes: Change[]): CycleError | null {
         continue;
       }
 
-      const reqName = c.requires[frame.reqIdx]!;
+      const reqName = resolveDepName(c.requires[frame.reqIdx]!);
       frame.reqIdx++;
 
       const neighbor = nameToIndex.get(reqName);
