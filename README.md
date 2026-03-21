@@ -1,9 +1,9 @@
-# sqlever -- Sqitch-compatible PostgreSQL migration tool
+# sqlever -- Sqitch-compatible Postgres migration tool
 
 [![CI](https://github.com/NikolayS/sqlever/actions/workflows/ci.yml/badge.svg)](https://github.com/NikolayS/sqlever/actions/workflows/ci.yml) [![npm version](https://img.shields.io/npm/v/sqlever)](https://www.npmjs.com/package/sqlever) [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE) [![Bun](https://img.shields.io/badge/bun-1.1%2B-orange.svg)](https://bun.sh)
 <!-- TODO: add codecov badge once coverage reporting is wired up -->
 
-Sqitch-compatible PostgreSQL migration tool with static analysis, expand/contract support, batched DML, and AI-powered explanations.
+Sqitch-compatible Postgres migration tool with static analysis, expand/contract support, batched DML, and AI-powered explanations.
 
 ---
 
@@ -15,7 +15,7 @@ Sqitch-compatible PostgreSQL migration tool with static analysis, expand/contrac
 - **Batched DML** -- backfill millions of rows without locking, with replication lag and VACUUM pressure monitoring.
 - **AI-powered** -- `sqlever explain` summarizes migrations in plain English; `sqlever review` generates structured PR comments.
 - **Single binary** -- compiled with Bun, no runtime dependencies. Sub-50ms startup. No Perl, no JVM, no Docker required.
-- **100% open source** -- every feature ships under Apache 2.0. No paywalled "Pro" tier for safety rules or CI integrations.
+- **100% open source** -- every feature ships under Apache 2.0, including all safety rules and CI integrations.
 
 ## Quick start
 
@@ -211,12 +211,12 @@ alias sqitch=sqlever
 | | sqlever | Sqitch | Atlas | Flyway |
 |---|---------|--------|-------|--------|
 | Migration style | Imperative (plain SQL) | Imperative (plain SQL) | Declarative + versioned | Sequential numbered files |
-| Static analysis | 22 rules, built in | None | ~12 rules (Pro-only for PG) | None |
-| PostgreSQL depth | Advisory locks, PgBouncer detection, replication lag monitoring | Basic | Good | Basic |
+| Static analysis | 22 rules, built in | None | ~12 rules (Pro edition) | None |
+| Postgres depth | Advisory locks, PgBouncer detection, replication lag monitoring | Basic | Good | Basic |
 | Sqitch compatibility | Full | -- | None | None |
 | Runtime | Single binary (Bun) | Perl + CPAN | Go binary | JVM |
 | License | Apache 2.0 (all features) | MIT | Apache 2.0 (core) + proprietary Pro | Apache 2.0 (Community) |
-| Non-transactional DDL | Write-ahead tracking with crash recovery | Manual | `--tx-mode none` (no recovery) | Manual |
+| Non-transactional DDL | Write-ahead tracking with crash recovery | Manual | `--tx-mode none` | Manual |
 | Expand/contract | Built in (sync triggers, phase tracking) | None | None | None |
 | Batched DML | Built in (PGQ, lag monitoring, backpressure) | None | None | None |
 | AI explanations | Built in (`explain`, `review`) | None | None | None |
@@ -272,7 +272,7 @@ docker run --rm sqlever/sqlever deploy db:pg://host.docker.internal/myapp
 
 The image is based on Alpine with `psql` included.
 
-### GitHub Releases
+### GitHub releases
 
 Pre-built binaries for 4 platforms are attached to every [GitHub Release](https://github.com/NikolayS/sqlever/releases):
 
@@ -302,7 +302,7 @@ Run tests:
 bun install
 bun test                       # all tests
 bun test tests/unit/           # unit tests only
-bun test tests/integration/    # integration tests (requires PostgreSQL)
+bun test tests/integration/    # integration tests (requires Postgres)
 ```
 
 Type-check:

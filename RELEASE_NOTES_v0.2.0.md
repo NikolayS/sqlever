@@ -1,4 +1,4 @@
-# sqlever v0.2.0 Release Notes
+# sqlever v0.2.0 release notes
 
 The first production-quality release of sqlever. This version has been validated
 against a real Sqitch oracle (running identical plans through both sqlever and
@@ -57,7 +57,7 @@ on identical migration plans and comparing results:
 **Expand/contract migrations:**
 - `add --expand` / `add --contract` generate paired migration changes.
 - Bidirectional sync trigger generation keeps old and new schemas in sync.
-- Phase tracker manages expand/contract state in PostgreSQL.
+- Phase tracker manages expand/contract state in Postgres.
 - `deploy --phase expand|contract` deploys only the specified phase.
 
 **Other highlights:**

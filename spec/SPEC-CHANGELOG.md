@@ -143,7 +143,7 @@ Round 2 expert review findings addressed. Four reviewers: PG internals expert, S
 
 ### Important fixes
 
-- **SA003 USING clause corrected:** Changed from "always requires a rewrite" to "PostgreSQL rewrites the table to evaluate the expression, even when types are binary-compatible." Added missing safe casts: `char(N)` to `varchar`/`text`, `numeric(P,S)` to unconstrained `numeric`. Documented that `int` to `bigint` is NOT safe (rewrite required).
+- **SA003 USING clause corrected:** Changed from "always requires a rewrite" to "Postgres rewrites the table to evaluate the expression, even when types are binary-compatible." Added missing safe casts: `char(N)` to `varchar`/`text`, `numeric(P,S)` to unconstrained `numeric`. Documented that `int` to `bigint` is NOT safe (rewrite required).
 
 - **SA016 lock level corrected:** Fixed from `AccessExclusiveLock` to `ShareLock` (PG < 16) / `ShareUpdateExclusiveLock` (PG 16+).
 
@@ -269,7 +269,7 @@ Comprehensive update based on expert review from four specialists: PG internals 
 
 - **sqlever.* schema documented (I21):** Clarified in DD3 that `sqlever.*` schema is created only when sqlever-specific features are used. Independent of `sqitch.*`. Can be safely dropped if reverting to Sqitch.
 
-- **Batch worker connections (I22):** Documented that batch worker requires direct PostgreSQL connection (not PgBouncer in transaction mode). SET statements re-issued per batch transaction.
+- **Batch worker connections (I22):** Documented that batch worker requires direct Postgres connection (not PgBouncer in transaction mode). SET statements re-issued per batch transaction.
 
 - **VACUUM pressure and bloat (I23):** Added dead tuple monitoring (`pg_stat_user_tables.n_dead_tup`) to batched DML features. Pause if accumulation exceeds threshold.
 

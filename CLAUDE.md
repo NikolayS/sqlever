@@ -2,7 +2,7 @@
 
 ## Project
 
-sqlever -- Sqitch-compatible PostgreSQL migration tool with static analysis, expand/contract support, batched DML, and AI-powered explanations. The repo is internally named "stitch" but the product and npm package are "sqlever."
+sqlever -- Sqitch-compatible Postgres migration tool with static analysis, expand/contract support, batched DML, and AI-powered explanations. The repo is internally named "stitch" but the product and npm package are "sqlever."
 
 ## Architecture
 
@@ -35,7 +35,7 @@ src/
 ### Key design decisions (from spec/SPEC.md)
 
 - **DD1 -- TypeScript + Bun, not Rust.** Single binary, fast iteration, easier contributor onboarding.
-- **DD2 -- PostgreSQL first.** Depth over breadth. No multi-DB abstraction.
+- **DD2 -- Postgres first.** Depth over breadth. No multi-DB abstraction.
 - **DD3 -- Sqitch tracking schema compatibility.** We read/write `sqitch.*` tables. sqlever-specific features use a separate `sqlever.*` schema.
 - **DD4 -- SQL parser.** `libpg-query` for AST-level analysis. Fall back to regex only when necessary, with a clear comment.
 - **DD5 -- Plan file is source of truth.** Never modified without explicit command.
@@ -49,7 +49,7 @@ src/
 ### Prerequisites
 
 - [Bun](https://bun.sh) 1.1+
-- Docker (for integration tests -- provides PostgreSQL)
+- Docker (for integration tests -- provides Postgres)
 - psql (for running migrations at runtime)
 
 ### Install dependencies
@@ -63,11 +63,11 @@ bun install
 ```bash
 bun test                       # all tests
 bun test tests/unit/           # unit tests only (fast, no DB needed)
-bun test tests/integration/    # integration tests (requires PostgreSQL)
+bun test tests/integration/    # integration tests (requires Postgres)
 bun test tests/compat/         # Sqitch oracle compatibility tests
 ```
 
-For integration tests, start PostgreSQL first:
+For integration tests, start Postgres first:
 
 ```bash
 docker compose up -d           # starts PG 17 on port 5417
@@ -125,7 +125,7 @@ CI runs on every push and PR (`.github/workflows/ci.yml`):
 ### Real tests, not mocks
 
 - **Unit tests** are pure functions, no I/O. Located in `tests/unit/`.
-- **Integration tests** use a real PostgreSQL instance (Docker). Located in `tests/integration/`. Each test gets a fresh database. No mocking the DB layer.
+- **Integration tests** use a real Postgres instance (Docker). Located in `tests/integration/`. Each test gets a fresh database. No mocking the DB layer.
 - **Compatibility tests** run Sqitch and sqlever side-by-side against identical databases and diff the tracking table state. Located in `tests/compat/`.
 
 ### What to test
