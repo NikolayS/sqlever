@@ -38,6 +38,35 @@ jobs:
           TEST_PG_PASS: test
         run: bun test tests/integration/
 
+  compat:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: postgres
+        ports:
+          - 5417:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Pull Sqitch Docker image
+        run: docker pull sqitch/sqitch:latest
+      - name: Run compatibility tests
+        env:
+          TEST_PG_HOST: localhost
+          TEST_PG_PORT: "5417"
+          TEST_PG_USER: postgres
+          TEST_PG_PASS: test
+        run: bun test tests/compat/ --timeout 180000
+
   build:
     runs-on: ${{ matrix.os }}
     strategy:
