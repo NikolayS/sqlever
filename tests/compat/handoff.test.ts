@@ -16,7 +16,7 @@
 //   - PostgreSQL reachable at localhost:5417 (docker compose up)
 
 import { describe, test, expect, beforeEach, afterEach, beforeAll } from "bun:test";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -52,7 +52,11 @@ function sqitchDbUri(dbName: string): string {
 // ---------------------------------------------------------------------------
 
 async function makeTempDir(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "sqlever-handoff-"));
+  const dir = await mkdtemp(join(tmpdir(), "sqlever-handoff-"));
+  // mkdtemp creates 0700 dirs; Sqitch's Docker image runs as uid 1024
+  // ("sqitch"), which needs read+execute access to the mounted volume.
+  await chmod(dir, 0o755);
+  return dir;
 }
 
 /**
@@ -211,15 +215,19 @@ describe.skipIf(!hasDocker || !hasPg)("compat: mid-deploy handoff", () => {
     const dockerDbUri = sqitchDbUri(dbName);
     const localDbUri = pgUri(dbName);
 
-    // We need to update sqitch.conf to set the engine target for Sqitch.
-    // Sqitch Docker needs a db:pg:// URI via its config.
+    // Rewrite sqitch.conf for Docker: the original has an absolute
+    // host-path top_dir which is meaningless inside the container.
+    // Write a clean conf with engine target so Sqitch can find the plan
+    // at /repo/sqitch.plan (the volume-mounted working directory).
     const confPath = join(tmpDir, "sqitch.conf");
-    const existingConf = await readFile(confPath, "utf-8");
-    const updatedConf = existingConf + `
-[engine "pg"]
-\ttarget = ${dockerDbUri}
-`;
-    await writeFile(confPath, updatedConf);
+    await writeFile(confPath, [
+      "[core]",
+      "\tengine = pg",
+      "",
+      '[engine "pg"]',
+      `\ttarget = ${dockerDbUri}`,
+      "",
+    ].join("\n"));
 
     // 2. Deploy changes 1-5 with Sqitch (Docker)
     const sqitchDeployResult = runSqitchDocker(
@@ -312,14 +320,16 @@ describe.skipIf(!hasDocker || !hasPg)("compat: mid-deploy handoff", () => {
     const dockerDbUri = sqitchDbUri(dbName);
     const localDbUri = pgUri(dbName);
 
-    // Update sqitch.conf with engine target for Sqitch
+    // Rewrite sqitch.conf for Docker (see comment in test 1 above).
     const confPath = join(tmpDir, "sqitch.conf");
-    const existingConf = await readFile(confPath, "utf-8");
-    const updatedConf = existingConf + `
-[engine "pg"]
-\ttarget = ${dockerDbUri}
-`;
-    await writeFile(confPath, updatedConf);
+    await writeFile(confPath, [
+      "[core]",
+      "\tengine = pg",
+      "",
+      '[engine "pg"]',
+      `\ttarget = ${dockerDbUri}`,
+      "",
+    ].join("\n"));
 
     // 2. Deploy all 10 changes with sqlever
     const deployResult = await runSqlever(
