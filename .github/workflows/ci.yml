@@ -13,14 +13,30 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [14, 15, 16, 17, 18]
+        include:
+          - pg: 14
+            port: 5414
+          - pg: 15
+            port: 5415
+          - pg: 16
+            port: 5416
+          - pg: 17
+            port: 5417
+          - pg: 18
+            port: 5418
     services:
       postgres:
-        image: postgres:17
+        image: postgres:${{ matrix.pg }}
         env:
           POSTGRES_PASSWORD: test
           POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
         ports:
-          - 5417:5432
+          - ${{ matrix.port }}:5432
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 2s
@@ -33,7 +49,7 @@ jobs:
       - name: Run integration tests
         env:
           TEST_PG_HOST: localhost
-          TEST_PG_PORT: "5417"
+          TEST_PG_PORT: "${{ matrix.port }}"
           TEST_PG_USER: postgres
           TEST_PG_PASS: test
         run: bun test tests/integration/
@@ -52,3 +68,17 @@ jobs:
         run: |
           ./dist/sqlever --version
           ./dist/sqlever --version | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'
+      - name: Smoke test — verify libpg-query WASM parses SQL
+        run: |
+          ./dist/sqlever analyze tests/fixtures/edge-cases.sql --format json
+
+  compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sqitch oracle compatibility tests (placeholder)
+        run: |
+          echo "Sqitch oracle compatibility tests are not yet wired up."
+          echo "This job will run Sqitch's TAP oracle tests against sqlever"
+          echo "once Docker-in-Docker support is configured."
+          echo "See: https://github.com/NikolayS/sqlever/issues/81"
