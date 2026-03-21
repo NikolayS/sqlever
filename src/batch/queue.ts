@@ -29,7 +29,7 @@ import type { DatabaseClient } from "../db/client";
 // ---------------------------------------------------------------------------
 
 /** Job status values matching the lifecycle in SPEC Section 5.5. */
-export type JobStatus = "pending" | "running" | "done" | "failed" | "dead";
+export type JobStatus = "pending" | "running" | "paused" | "done" | "failed" | "dead" | "cancelled";
 
 /** Which partition a job lives in. */
 export type PartitionId = 0 | 1 | 2;
@@ -90,11 +90,13 @@ export const PARTITION_COUNT = 3;
 
 /** Valid status transitions. Maps current status -> allowed next statuses. */
 export const VALID_TRANSITIONS: Record<JobStatus, readonly JobStatus[]> = {
-  pending: ["running"],
-  running: ["done", "failed", "dead"],
+  pending: ["running", "cancelled"],
+  running: ["done", "failed", "dead", "paused", "cancelled"],
+  paused: ["running", "cancelled"],
   failed: ["running", "dead"],
   dead: ["running"],
   done: [],
+  cancelled: [],
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -131,7 +133,7 @@ CREATE TABLE IF NOT EXISTS ${s}.batch_jobs (
   updated_at    timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (id, partition_id),
   CONSTRAINT batch_jobs_status_check
-    CHECK (status IN ('pending', 'running', 'done', 'failed', 'dead')),
+    CHECK (status IN ('pending', 'running', 'paused', 'done', 'failed', 'dead', 'cancelled')),
   CONSTRAINT batch_jobs_partition_id_check
     CHECK (partition_id IN (0, 1, 2))
 ) PARTITION BY LIST (partition_id);
@@ -415,6 +417,62 @@ export class BatchQueue {
   }
 
   /**
+   * Pause a running job. Transitions running -> paused.
+   */
+  async pauseJob(jobId: number, partitionId: PartitionId): Promise<BatchJob> {
+    return this.transitionJob(jobId, partitionId, "paused");
+  }
+
+  /**
+   * Resume a paused job. Transitions paused -> running.
+   */
+  async resumeJob(jobId: number, partitionId: PartitionId): Promise<BatchJob> {
+    const result = await this.db.query<BatchJob>(
+      `UPDATE ${this.qualifiedName("batch_jobs")}
+       SET status = 'running',
+           heartbeat_at = now(),
+           updated_at = now()
+       WHERE id = $1 AND partition_id = $2 AND status = 'paused'
+       RETURNING *`,
+      [jobId, partitionId],
+    );
+
+    if (result.rows.length === 0) {
+      // Check if job exists to provide a better error
+      const current = await this.getJob(jobId, partitionId);
+      if (!current) {
+        throw new Error(`Job ${jobId} not found in partition ${partitionId}`);
+      }
+      throw new Error(
+        `Cannot resume job ${jobId}: status is '${current.status}', expected 'paused'`,
+      );
+    }
+
+    return result.rows[0]!;
+  }
+
+  /**
+   * Cancel a job. Transitions pending/running/paused -> cancelled.
+   */
+  async cancelJob(jobId: number, partitionId: PartitionId): Promise<BatchJob> {
+    return this.transitionJob(jobId, partitionId, "cancelled");
+  }
+
+  /**
+   * Look up a job by name. Returns the first matching job (most recent).
+   */
+  async getJobByName(name: string): Promise<BatchJob | null> {
+    const result = await this.db.query<BatchJob>(
+      `SELECT * FROM ${this.qualifiedName("batch_jobs")}
+       WHERE name = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [name],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  /**
    * Update heartbeat for a running job.
    */
   async updateHeartbeat(
@@ -532,9 +590,11 @@ export class BatchQueue {
     const counts: Record<JobStatus, number> = {
       pending: 0,
       running: 0,
+      paused: 0,
       done: 0,
       failed: 0,
       dead: 0,
+      cancelled: 0,
     };
 
     for (const row of result.rows) {
