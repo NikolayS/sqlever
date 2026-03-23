@@ -187,6 +187,16 @@ describe("topologicalSort", () => {
     expect(sorted).toEqual(["A", "B"]);
   });
 
+  it("handles @tag dependency references", () => {
+    // change_b requires change_a@v1.0 — the @v1.0 suffix must be stripped
+    const changes = [
+      makeChange("change_a"),
+      makeChange("change_b", { requires: ["change_a@v1.0"] }),
+    ];
+    const result = topologicalSort(changes);
+    expect(result.map((c) => c.name)).toEqual(["change_a", "change_b"]);
+  });
+
   it("self-referencing change throws CycleError", () => {
     const changes = [makeChange("A", { requires: ["A"] })];
     expect(() => topologicalSort(changes)).toThrow(CycleError);
@@ -297,6 +307,15 @@ describe("validateDependencies", () => {
 
   it("handles changes with no deps", () => {
     const changes = [makeChange("A"), makeChange("B")];
+    expect(() => validateDependencies(changes, [])).not.toThrow();
+  });
+
+  it("handles @tag references — suffix stripped before lookup", () => {
+    const changes = [
+      makeChange("change_a"),
+      makeChange("change_b", { requires: ["change_a@v1.0"] }),
+    ];
+    // Should not throw — change_a exists, @v1.0 suffix stripped
     expect(() => validateDependencies(changes, [])).not.toThrow();
   });
 });

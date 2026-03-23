@@ -66,7 +66,7 @@ mock.module("pg/lib/client", () => ({
 }));
 
 // Type imports (these work statically)
-import type { DeployOptions, DeployDeps } from "../../src/commands/deploy";
+import type { DeployOptions, DeployDeps, buildScriptNameMap as BuildScriptNameMapType } from "../../src/commands/deploy";
 import type { SpawnFn, PsqlRunResult } from "../../src/psql";
 
 // Import after mocking
@@ -78,6 +78,7 @@ const {
   projectLockKey,
   isNonTransactional,
   parseDeployOptions,
+  buildScriptNameMap,
   ADVISORY_LOCK_NAMESPACE,
   EXIT_CONCURRENT_DEPLOY,
   EXIT_DEPLOY_FAILED,
@@ -86,6 +87,7 @@ const {
 } = await import("../../src/commands/deploy");
 const { loadConfig } = await import("../../src/config/index");
 const { PsqlRunner } = await import("../../src/psql");
+const { parsePlan: parsePlanFn } = await import("../../src/plan/parser");
 const { ShutdownManager } = await import("../../src/signals");
 
 // ---------------------------------------------------------------------------
@@ -1323,6 +1325,59 @@ create_schema 2025-01-01T00:00:00Z Test User <test@example.com> # Schema
 
     it("throws when --lock-timeout is missing its value", () => {
       expect(() => parseDeployOptions(makeArgs(["--lock-timeout"]))).toThrow("--lock-timeout requires a value");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // buildScriptNameMap — rework filename resolution
+  // -----------------------------------------------------------------------
+
+  describe("buildScriptNameMap()", () => {
+    it("maps non-reworked changes to their plain name", () => {
+      const plan = parsePlanFn(`%syntax-version=1.0.0
+%project=myproject
+
+create_schema 2025-01-01T00:00:00Z Test User <test@example.com> # Create schema
+add_users 2025-01-02T00:00:00Z Test User <test@example.com> # Add users table
+`);
+      const map = buildScriptNameMap(plan);
+      for (const change of plan.changes) {
+        expect(map.get(change.change_id)).toBe(change.name);
+      }
+    });
+
+    it("maps earlier reworked change to name@tag, latest to plain name", () => {
+      const plan = parsePlanFn(`%syntax-version=1.0.0
+%project=myproject
+
+add_users 2025-01-01T00:00:00Z Test User <test@example.com> # v1
+@v1.0 2025-01-02T00:00:00Z Test User <test@example.com> # tag v1.0
+add_users [add_users@v1.0] 2025-02-01T00:00:00Z Test User <test@example.com> # v2
+`);
+      const map = buildScriptNameMap(plan);
+      // First occurrence (original) should be add_users@v1.0
+      expect(map.get(plan.changes[0]!.change_id)).toBe("add_users@v1.0");
+      // Second occurrence (reworked/latest) should be plain add_users
+      expect(map.get(plan.changes[1]!.change_id)).toBe("add_users");
+    });
+
+    it("handles multiple reworks with different tags", () => {
+      const plan = parsePlanFn(`%syntax-version=1.0.0
+%project=myproject
+
+add_users 2025-01-01T00:00:00Z Test User <test@example.com> # v1
+@v1.0 2025-01-02T00:00:00Z Test User <test@example.com> # tag v1.0
+add_users [add_users@v1.0] 2025-02-01T00:00:00Z Test User <test@example.com> # v2
+@v2.0 2025-02-02T00:00:00Z Test User <test@example.com> # tag v2.0
+add_users [add_users@v2.0] 2025-03-01T00:00:00Z Test User <test@example.com> # v3
+`);
+      const map = buildScriptNameMap(plan);
+      // First occurrence -> add_users@v1.0
+      expect(map.get(plan.changes[0]!.change_id)).toBe("add_users@v1.0");
+      // Second occurrence -> add_users@v2.0
+      expect(map.get(plan.changes[1]!.change_id)).toBe("add_users@v2.0");
+      // Third occurrence (latest) -> plain add_users
+      expect(map.get(plan.changes[2]!.change_id)).toBe("add_users");
     });
   });
 });
