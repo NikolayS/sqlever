@@ -157,6 +157,7 @@ const { Registry } = await import("../../src/db/registry");
 const {
   executeDeploy,
   projectLockKey,
+  isAutoCommit,
   isNonTransactional,
   ADVISORY_LOCK_NAMESPACE,
   EXIT_CONCURRENT_DEPLOY,

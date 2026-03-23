@@ -27,7 +27,7 @@ import {
 import { PsqlRunner, type PsqlRunResult } from "../psql";
 import { ShutdownManager } from "../signals";
 import { info, error as logError, verbose } from "../output";
-import { isNonTransactional } from "./deploy";
+import { isAutoCommit } from "./deploy";
 import { resolveTargetUri } from "./shared";
 
 // ---------------------------------------------------------------------------
@@ -395,7 +395,7 @@ export async function runRevert(
 
       verbose(`Reverting: ${change.name}`);
 
-      // Read revert script to check for no-transaction directive
+      // Read revert script to check for auto-commit directive
       let scriptContent: string;
       try {
         scriptContent = readFileSync(change.revertScriptPath, "utf-8");

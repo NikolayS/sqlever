@@ -901,20 +901,20 @@ describe("SA020: CONCURRENTLY in transactional context", () => {
     expect(findings).toHaveLength(0);
   });
 
-  test("suppressed by -- sqlever:no-transaction comment", () => {
-    const sql = `-- sqlever:no-transaction
+  test("suppressed by -- sqlever:auto-commit directive", () => {
+    const sql = `-- sqlever:auto-commit
 CREATE INDEX CONCURRENTLY idx ON users (email);`;
     const ctx = makeContext(sql);
     const findings = SA020.check(ctx);
     expect(findings).toHaveLength(0);
   });
 
-  test("includes suggestion about non-transactional", () => {
+  test("includes suggestion about auto-commit", () => {
     const ctx = makeContext(
       "CREATE INDEX CONCURRENTLY idx ON users (email);",
     );
     const findings = SA020.check(ctx);
-    expect(findings[0]!.suggestion).toContain("non-transactional");
+    expect(findings[0]!.suggestion).toContain("auto-commit");
   });
 });
 

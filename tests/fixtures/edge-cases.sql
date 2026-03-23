@@ -120,7 +120,7 @@ CREATE TYPE post_status AS ENUM ('draft', 'published', 'archived');
 -- 17. ALTER TABLE with NOT NULL on existing column (dangerous!)
 ALTER TABLE posts ALTER COLUMN title SET NOT NULL;
 
--- 18. CREATE INDEX CONCURRENTLY (non-transactional DDL)
+-- 18. CREATE INDEX CONCURRENTLY (auto-commit DDL)
 CREATE INDEX CONCURRENTLY idx_posts_published
 ON posts (published_at)
 WHERE published_at IS NOT NULL;

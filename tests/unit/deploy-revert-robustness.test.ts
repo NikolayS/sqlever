@@ -1,6 +1,6 @@
 // tests/unit/deploy-revert-robustness.test.ts — Deploy/Revert Robustness
 //
-// Comprehensive tests for issue #125: transaction semantics, non-transactional
+// Comprehensive tests for issue #125: transaction semantics, auto-commit
 // DDL handling, advisory lock contention, failure recovery, lock timeout guard,
 // SIGINT/SIGTERM cleanup, and revert robustness.
 
@@ -82,6 +82,7 @@ const {
   executeDeploy,
   runDeploy,
   projectLockKey,
+  isAutoCommit,
   isNonTransactional,
   parseDeployOptions,
   ADVISORY_LOCK_NAMESPACE,
@@ -396,10 +397,10 @@ describe("deploy/revert robustness (issue #125)", () => {
       );
     });
 
-    it("non-transactional change in --mode change skips --single-transaction for that script only", async () => {
+    it("auto-commit change in --mode change skips --single-transaction for that script only", async () => {
       writePlan(testDir, NON_TXN_PLAN);
       writeDeployScript(testDir, "create_schema", "CREATE SCHEMA myapp;");
-      writeDeployScript(testDir, "add_index", "-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY idx ON users(email);");
+      writeDeployScript(testDir, "add_index", "-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY idx ON users(email);");
 
       const { runner, calls } = createTrackingPsqlRunner();
       const deps = await createDeps();
@@ -417,14 +418,14 @@ describe("deploy/revert robustness (issue #125)", () => {
   });
 
   // =========================================================================
-  // 2. Non-transactional handling (7 tests)
+  // 2. Auto-commit handling (7 tests)
   // =========================================================================
 
-  describe("2. Non-transactional handling", () => {
+  describe("2. Auto-commit handling", () => {
     it("CIC script runs without BEGIN (no --single-transaction)", async () => {
       writePlan(testDir, NON_TXN_PLAN);
       writeDeployScript(testDir, "create_schema", "CREATE SCHEMA myapp;");
-      writeDeployScript(testDir, "add_index", "-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY idx ON users(email);");
+      writeDeployScript(testDir, "add_index", "-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY idx ON users(email);");
 
       const { runner, calls } = createTrackingPsqlRunner();
       const deps = await createDeps();
@@ -439,22 +440,27 @@ describe("deploy/revert robustness (issue #125)", () => {
       expect(cicCall!.args).not.toContain("--single-transaction");
     });
 
-    it("detects -- sqlever:no-transaction marker on first line", () => {
-      expect(isNonTransactional("-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY ...")).toBe(true);
+    it("detects -- sqlever:auto-commit marker on first line", () => {
+      expect(isAutoCommit("-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY ...")).toBe(true);
     });
 
-    it("detects -- sqlever:no-transaction with extra spacing", () => {
-      expect(isNonTransactional("--  sqlever:no-transaction\nSELECT 1")).toBe(true);
+    it("detects -- sqlever:auto-commit with extra spacing", () => {
+      expect(isAutoCommit("--  sqlever:auto-commit\nSELECT 1")).toBe(true);
     });
 
-    it("detects -- sqlever:no-transaction case-insensitively", () => {
-      expect(isNonTransactional("-- SQLEVER:NO-TRANSACTION\nSELECT 1")).toBe(true);
+    it("detects -- sqlever:auto-commit case-insensitively", () => {
+      expect(isAutoCommit("-- SQLEVER:AUTO-COMMIT\nSELECT 1")).toBe(true);
     });
 
-    it("records non-transactional change in tracking table after success", async () => {
+    it("accepts legacy -- sqlever:no-transaction directive", () => {
+      expect(isAutoCommit("-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY ...")).toBe(true);
+      expect(isAutoCommit("-- SQLEVER:NO-TRANSACTION\nSELECT 1")).toBe(true);
+    });
+
+    it("records auto-commit change in tracking table after success", async () => {
       writePlan(testDir, NON_TXN_PLAN);
       writeDeployScript(testDir, "create_schema", "CREATE SCHEMA myapp;");
-      writeDeployScript(testDir, "add_index", "-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY idx ON users(email);");
+      writeDeployScript(testDir, "add_index", "-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY idx ON users(email);");
 
       const deps = await createDeps();
       const options = defaultOptions(testDir);
@@ -472,7 +478,7 @@ describe("deploy/revert robustness (issue #125)", () => {
     it("failed CIC leaves no tracking record for that change", async () => {
       writePlan(testDir, NON_TXN_PLAN);
       writeDeployScript(testDir, "create_schema", "CREATE SCHEMA myapp;");
-      writeDeployScript(testDir, "add_index", "-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY idx ON users(email);");
+      writeDeployScript(testDir, "add_index", "-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY idx ON users(email);");
 
       const deps = await createDeps({ failOnScript: "add_index" });
       const options = defaultOptions(testDir);
@@ -492,7 +498,7 @@ describe("deploy/revert robustness (issue #125)", () => {
       // First deploy: add_index fails
       writePlan(testDir, NON_TXN_PLAN);
       writeDeployScript(testDir, "create_schema", "CREATE SCHEMA myapp;");
-      writeDeployScript(testDir, "add_index", "-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY idx ON users(email);");
+      writeDeployScript(testDir, "add_index", "-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY idx ON users(email);");
 
       const deps1 = await createDeps({ failOnScript: "add_index" });
       const options1 = defaultOptions(testDir);

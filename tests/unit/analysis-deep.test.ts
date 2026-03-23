@@ -429,7 +429,7 @@ ALTER TABLE users VALIDATE CONSTRAINT chk_age;`;
 });
 
 describe("SA020: CONCURRENTLY in transactional context", () => {
-  test("CIC without no-transaction marker — triggers", () => {
+  test("CIC without auto-commit marker — triggers", () => {
     const ctx = makeContext(
       "CREATE INDEX CONCURRENTLY idx ON users (email);",
     );
@@ -438,8 +438,8 @@ describe("SA020: CONCURRENTLY in transactional context", () => {
     expect(findings[0]!.ruleId).toBe("SA020");
   });
 
-  test("CIC with -- sqlever:no-transaction — no trigger", () => {
-    const sql = `-- sqlever:no-transaction
+  test("CIC with -- sqlever:auto-commit — no trigger", () => {
+    const sql = `-- sqlever:auto-commit
 CREATE INDEX CONCURRENTLY idx ON users (email);`;
     const ctx = makeContext(sql);
     const findings = SA020.check(ctx);
@@ -453,7 +453,7 @@ CREATE INDEX CONCURRENTLY idx ON users (email);`;
   });
 
   test("DROP INDEX CONCURRENTLY with marker — no trigger", () => {
-    const sql = `-- sqlever:no-transaction
+    const sql = `-- sqlever:auto-commit
 DROP INDEX CONCURRENTLY old_idx;`;
     const ctx = makeContext(sql);
     const findings = SA020.check(ctx);
