@@ -364,92 +364,36 @@ describe("runRework", () => {
     setupReworkProject(tmpDir, PLAN_WITH_TAG);
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runRework({ name: "", note: "" }, cfg, TEST_ENV);
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    await expect(
+      runRework({ name: "", note: "" }, cfg, TEST_ENV),
+    ).rejects.toThrow("change name is required");
   });
 
   it("errors when change does not exist in plan", async () => {
     setupReworkProject(tmpDir, PLAN_WITH_TAG);
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runRework(
-        { name: "nonexistent_change", note: "" },
-        cfg,
-        TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    await expect(
+      runRework({ name: "nonexistent_change", note: "" }, cfg, TEST_ENV),
+    ).rejects.toThrow("Unknown change");
   });
 
   it("errors when no tag exists after the change", async () => {
     setupReworkProject(tmpDir, PLAN_NO_TAG);
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runRework({ name: "add_users", note: "" }, cfg, TEST_ENV);
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    await expect(
+      runRework({ name: "add_users", note: "" }, cfg, TEST_ENV),
+    ).rejects.toThrow("no tag exists");
   });
 
   it("errors when plan file does not exist", async () => {
     // Don't create plan file
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runRework({ name: "add_users", note: "" }, cfg, TEST_ENV);
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    await expect(
+      runRework({ name: "add_users", note: "" }, cfg, TEST_ENV),
+    ).rejects.toThrow("plan file not found");
   });
 
   it("handles rework when change is not the last change in plan", async () => {

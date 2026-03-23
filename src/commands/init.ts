@@ -15,7 +15,7 @@ import {
   confSet,
   type SqitchConf,
 } from "../config/sqitch-conf";
-import { info, error } from "../output";
+import { info } from "../output";
 import { serializePlan } from "../plan/writer";
 import type { Plan } from "../plan/types";
 
@@ -177,14 +177,13 @@ export async function runInit(args: ParsedArgs): Promise<void> {
     try {
       const planStat = await stat(planPath);
       if (planStat.isFile()) {
-        error(
-          `Plan file already exists: ${planPath}\n` +
-            `Use --force to reinitialize.`,
+        throw new Error(
+          `plan file already exists: ${planPath}. Use --force to reinitialize.`,
         );
-        process.exit(1);
       }
-    } catch {
-      // File doesn't exist — proceed
+    } catch (err) {
+      // Rethrow our own errors; ignore ENOENT (file doesn't exist)
+      if (err instanceof Error && !("code" in err)) throw err;
     }
   }
 

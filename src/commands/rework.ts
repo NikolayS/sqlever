@@ -21,7 +21,7 @@ import {
   revertTemplate,
   verifyTemplate,
 } from "./add";
-import { info, error, verbose } from "../output";
+import { info, verbose } from "../output";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -194,8 +194,7 @@ export async function runRework(
 
   // Validate change name
   if (!opts.name) {
-    error("Error: change name is required. Usage: sqlever rework <name> [-n note]");
-    process.exit(1);
+    throw new Error("change name is required. Usage: sqlever rework <name> [-n note]");
   }
 
   // Validate change name format (same rules as `add` — prevents path traversal)
@@ -220,22 +219,12 @@ export async function runRework(
 
   // Ensure plan file exists
   if (!existsSync(planPath)) {
-    error(`Error: plan file not found at ${planPath}. Run 'sqlever init' first.`);
-    process.exit(1);
+    throw new Error(`plan file not found at ${planPath}. Run 'sqlever init' first.`);
   }
 
   // Read and analyze the plan
   const planContent = readFileSync(planPath, "utf-8");
-  let ctx: ReworkContext;
-  try {
-    ctx = findReworkContext(planContent, opts.name);
-  } catch (err) {
-    if (err instanceof ReworkError) {
-      error(`Error: ${err.message}`);
-      process.exit(1);
-    }
-    throw err;
-  }
+  const ctx = findReworkContext(planContent, opts.name);
 
   const tagName = ctx.tagAfterChange.name;
 

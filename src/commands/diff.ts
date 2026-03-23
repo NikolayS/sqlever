@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { loadConfig } from "../config/index";
 import { parsePlan } from "../plan/parser";
 import type { Change, Plan, Tag } from "../plan/types";
-import { info, error, json as jsonOut } from "../output";
+import { info, json as jsonOut } from "../output";
 import type { ParsedArgs } from "../cli";
 import { resolveTargetUri, withDatabase } from "./shared";
 
@@ -304,9 +304,7 @@ export async function runDiff(args: ParsedArgs): Promise<void> {
     : join(topDir, config.core.plan_file);
 
   if (!existsSync(planFilePath)) {
-    error(`Plan file not found: ${planFilePath}`);
-    error("Run 'sqlever init' to initialize a project.");
-    process.exit(1);
+    throw new Error(`plan file not found: ${planFilePath}. Run 'sqlever init' to initialize a project.`);
   }
 
   const planContent = readFileSync(planFilePath, "utf-8");
@@ -314,12 +312,10 @@ export async function runDiff(args: ParsedArgs): Promise<void> {
 
   // Validate tag arguments
   if (diffOpts.fromTag && !diffOpts.toTag) {
-    error("--from requires --to");
-    process.exit(1);
+    throw new Error("--from requires --to");
   }
   if (diffOpts.toTag && !diffOpts.fromTag) {
-    error("--to requires --from");
-    process.exit(1);
+    throw new Error("--to requires --from");
   }
 
   // Resolve target URI for DB connection

@@ -13,7 +13,7 @@
 
 import type { ParsedArgs } from "../cli";
 import type { BatchJob } from "../batch/queue";
-import { info, error as logError, json as jsonOut, table } from "../output";
+import { info, json as jsonOut, table } from "../output";
 
 // ---------------------------------------------------------------------------
 // Subcommand argument types
@@ -347,9 +347,8 @@ export async function runBatch(args: ParsedArgs): Promise<void> {
   }
 
   if (!BATCH_SUBCOMMANDS.includes(subcommand as BatchSubcommand)) {
-    logError(`sqlever batch: unknown subcommand '${subcommand}'`);
     process.stdout.write(BATCH_HELP);
-    process.exit(1);
+    throw new Error(`unknown subcommand '${subcommand}'`);
   }
 
   const format = args.format;

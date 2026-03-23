@@ -11,7 +11,7 @@ import { resolve } from "node:path";
 import type { ParsedArgs } from "../cli";
 import { parsePlan } from "../plan/parser";
 import type { Plan, Change, Tag } from "../plan/types";
-import { info, error, json, table, getConfig } from "../output";
+import { info, json, table, getConfig } from "../output";
 
 // ---------------------------------------------------------------------------
 // Plan-specific argument parsing
@@ -256,20 +256,16 @@ export function runPlan(args: ParsedArgs): void {
   try {
     content = readFileSync(opts.planFile, "utf-8");
   } catch {
-    error(`Error: cannot read plan file: ${opts.planFile}`);
-    process.exit(1);
-    return; // unreachable, for TypeScript
+    throw new Error(`cannot read plan file: ${opts.planFile}`);
   }
 
   let plan: Plan;
   try {
     plan = parsePlan(content);
   } catch (e) {
-    error(
-      `Error: failed to parse plan file: ${e instanceof Error ? e.message : String(e)}`,
+    throw new Error(
+      `failed to parse plan file: ${e instanceof Error ? e.message : String(e)}`,
     );
-    process.exit(1);
-    return;
   }
 
   // Apply filters
