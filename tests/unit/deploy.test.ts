@@ -77,7 +77,6 @@ const {
   runDeploy,
   projectLockKey,
   isAutoCommit,
-  isNonTransactional,
   parseDeployOptions,
   buildScriptNameMap,
   ADVISORY_LOCK_NAMESPACE,
@@ -299,11 +298,6 @@ describe("deploy", () => {
 
     it("supports legacy no-transaction directive for backward compat", () => {
       expect(isAutoCommit("-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY ...")).toBe(true);
-    });
-
-    it("isNonTransactional alias works (backward compat)", () => {
-      expect(isNonTransactional("-- sqlever:auto-commit\nSELECT 1")).toBe(true);
-      expect(isNonTransactional("-- sqlever:no-transaction\nSELECT 1")).toBe(true);
     });
   });
 

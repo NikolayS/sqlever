@@ -158,7 +158,6 @@ const {
   executeDeploy,
   projectLockKey,
   isAutoCommit,
-  isNonTransactional,
   ADVISORY_LOCK_NAMESPACE,
   EXIT_CONCURRENT_DEPLOY,
   EXIT_DEPLOY_FAILED,

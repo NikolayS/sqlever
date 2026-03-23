@@ -201,50 +201,29 @@ describe("DatabaseClient", () => {
       expect(unsafeSetQuery).toBeUndefined();
     });
 
-    it("exits with code 10 on connection failure", async () => {
-      const exitSpy = spyOn(process, "exit").mockImplementation(
-        (_code?: number) => {
-          throw new Error(`process.exit(${_code})`);
-        },
-      );
-      const stderr = captureStderr();
+    it("throws on connection failure with descriptive message", async () => {
+      const client = new DatabaseClient("postgresql://user:pass@host/db");
+      const pgClient = mockInstances[0]!;
+      pgClient.connectShouldFail = true;
+      pgClient.connectError = new Error("ECONNREFUSED");
 
-      try {
-        const client = new DatabaseClient("postgresql://user:pass@host/db");
-        const pgClient = mockInstances[0]!;
-        pgClient.connectShouldFail = true;
-        pgClient.connectError = new Error("ECONNREFUSED");
-
-        await expect(client.connect()).rejects.toThrow("process.exit(10)");
-        expect(exitSpy).toHaveBeenCalledWith(EXIT_CODE_DB_UNREACHABLE);
-      } finally {
-        exitSpy.mockRestore();
-        stderr.restore();
-      }
+      await expect(client.connect()).rejects.toThrow("Database unreachable: ECONNREFUSED");
     });
 
     it("does not log password on connection failure", async () => {
-      const exitSpy = spyOn(process, "exit").mockImplementation(
-        (_code?: number) => {
-          throw new Error(`process.exit(${_code})`);
-        },
+      const client = new DatabaseClient(
+        "postgresql://admin:supersecret@host/db",
       );
-      setConfig({ verbose: true });
-      const stderr = captureStderr();
+      const pgClient = mockInstances[0]!;
+      pgClient.connectShouldFail = true;
 
       try {
-        const client = new DatabaseClient(
-          "postgresql://admin:supersecret@host/db",
-        );
-        const pgClient = mockInstances[0]!;
-        pgClient.connectShouldFail = true;
-
-        await expect(client.connect()).rejects.toThrow("process.exit");
-        expect(stderr.output).not.toContain("supersecret");
-        expect(stderr.output).toContain("***");
-      } finally {
-        exitSpy.mockRestore();
-        stderr.restore();
+        await client.connect();
+        throw new Error("should have thrown");
+      } catch (err) {
+        const message = (err as Error).message;
+        expect(message).not.toContain("supersecret");
+        expect(message).toContain("***");
       }
     });
   });

@@ -36,12 +36,12 @@ const VOLATILE_FUNCTIONS: ReadonlySet<string> = new Set([
  * Check if an expression contains a volatile function call.
  * Returns true if ANY function in the expression is volatile.
  */
-function containsVolatileFunction(n: unknown): boolean {
-  if (!n || typeof n !== "object") return false;
-  const nd = node(n);
+function containsVolatileFunction(astNode: unknown): boolean {
+  if (!astNode || typeof astNode !== "object") return false;
+  const exprNode = node(astNode);
 
-  if (nd.FuncCall) {
-    const funcNode = node(nd.FuncCall);
+  if (exprNode.FuncCall) {
+    const funcNode = node(exprNode.FuncCall);
     for (const fn of nodes(funcNode.funcname)) {
       const name = (node(fn).String as Record<string, unknown> | undefined);
       const sval = name ? String(node(name).sval ?? "").toLowerCase() : "";
@@ -56,20 +56,20 @@ function containsVolatileFunction(n: unknown): boolean {
     return false;
   }
 
-  if (nd.TypeCast) {
-    return containsVolatileFunction(node(nd.TypeCast).arg);
+  if (exprNode.TypeCast) {
+    return containsVolatileFunction(node(exprNode.TypeCast).arg);
   }
 
-  if (nd.A_Expr) {
-    const expr = node(nd.A_Expr);
+  if (exprNode.A_Expr) {
+    const expr = node(exprNode.A_Expr);
     return (
       containsVolatileFunction(expr.lexpr) ||
       containsVolatileFunction(expr.rexpr)
     );
   }
 
-  if (nd.CoalesceExpr) {
-    for (const arg of nodes(node(nd.CoalesceExpr).args)) {
+  if (exprNode.CoalesceExpr) {
+    for (const arg of nodes(node(exprNode.CoalesceExpr).args)) {
       if (containsVolatileFunction(arg)) return true;
     }
   }

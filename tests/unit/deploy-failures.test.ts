@@ -84,7 +84,6 @@ const {
   parseDeployOptions,
   projectLockKey,
   isAutoCommit,
-  isNonTransactional,
   ADVISORY_LOCK_NAMESPACE,
   EXIT_CONCURRENT_DEPLOY,
   EXIT_DEPLOY_FAILED,
@@ -451,13 +450,9 @@ describe("deploy failure recovery", () => {
       expect(EXIT_DB_UNREACHABLE).toBe(10);
     });
 
-    it("connect() calls process.exit(10) when DB is unreachable", async () => {
-      // The DatabaseClient.connect() method calls process.exit(10) directly.
-      // We verify the constant is correct and that runDeploy uses
-      // the DatabaseClient which has this behavior.
-      // Direct integration test of the exit path requires mocking process.exit,
-      // which the existing test infrastructure doesn't do. Instead, we verify
-      // the contract: EXIT_DB_UNREACHABLE = 10 and DatabaseClient uses it.
+    it("connect() throws when DB is unreachable", async () => {
+      // DatabaseClient.connect() throws an error on connection failure.
+      // The caller is responsible for handling the exit code.
       const { EXIT_CODE_DB_UNREACHABLE } = await import("../../src/db/client");
       expect(EXIT_CODE_DB_UNREACHABLE).toBe(10);
     });

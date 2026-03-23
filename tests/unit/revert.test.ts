@@ -51,7 +51,7 @@ const {
 } = await import("../../src/commands/revert");
 const { resolveTargetUri } = await import("../../src/commands/shared");
 const { parseArgs } = await import("../../src/cli");
-const { isAutoCommit, isNonTransactional } = await import("../../src/commands/deploy");
+const { isAutoCommit } = await import("../../src/commands/deploy");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -571,7 +571,6 @@ describe("revert command", () => {
     it("a revert script with legacy -- sqlever:no-transaction should NOT use --single-transaction", () => {
       const scriptContent = "-- sqlever:no-transaction\nDROP INDEX CONCURRENTLY IF EXISTS idx_foo;\n";
       expect(isAutoCommit(scriptContent)).toBe(true);
-      expect(isNonTransactional(scriptContent)).toBe(true);
     });
 
     it("a normal revert script should NOT use --single-transaction (matching Sqitch)", () => {

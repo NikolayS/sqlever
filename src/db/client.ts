@@ -12,7 +12,7 @@
 
 import Client from "pg/lib/client";
 import { parseUri, sqitchToStandard } from "./uri";
-import { error as logError, verbose as logVerbose, maskUri } from "../output";
+import { verbose as logVerbose, maskUri } from "../output";
 
 /** Exit code for database-unreachable errors (SPEC R6). */
 export const EXIT_CODE_DB_UNREACHABLE = 10;
@@ -84,7 +84,7 @@ export class DatabaseClient {
   /**
    * Connect to the database. Applies session settings after connecting.
    *
-   * On connection failure, logs a clear error and exits with code 10.
+   * @throws Error on connection failure (caller should handle exit codes)
    */
   async connect(): Promise<void> {
     const maskedUri = maskUri(this.uri);
@@ -95,9 +95,7 @@ export class DatabaseClient {
       this.connected = true;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      logError(`Database unreachable: ${message}`);
-      logError(`Connection URI: ${maskedUri}`);
-      process.exit(EXIT_CODE_DB_UNREACHABLE);
+      throw new Error(`Database unreachable: ${message} (URI: ${maskedUri})`);
     }
 
     await this.setSessionSettings();
