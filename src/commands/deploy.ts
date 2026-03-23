@@ -13,8 +13,8 @@ import { DatabaseClient } from "../db/client";
 import { Registry, type RecordDeployInput } from "../db/registry";
 import { parsePlan } from "../plan/parser";
 import { topologicalSort, filterPending, filterToTarget, validateDependencies } from "../plan/sort";
-import { computeScriptHash } from "../plan/types";
-import type { Change, Plan } from "../plan/types";
+import { computeScriptHashFromBytes } from "../plan/types";
+import type { Change, Plan, Tag } from "../plan/types";
 import { PsqlRunner, type PsqlRunResult } from "../psql";
 import { shouldSetLockTimeout } from "../lock-guard";
 import { resolveDeployIncludes } from "../includes/snapshot";
@@ -368,6 +368,8 @@ export interface DeployDeps {
 export async function executeDeploy(
   options: DeployOptions,
   deps: DeployDeps,
+  /** Pre-parsed plan — avoids re-reading and re-parsing the plan file when the caller already has it. */
+  preloadedPlan?: Plan,
 ): Promise<DeployResult> {
   const { db, registry, psqlRunner, config, shutdownMgr } = deps;
   const topDir = resolve(options.projectDir);
@@ -375,12 +377,17 @@ export async function executeDeploy(
   const verifyDir = config.core.verify_dir;
   const planFilePath = join(topDir, config.core.plan_file);
 
-  // 1. Parse plan file
-  if (!existsSync(planFilePath)) {
-    return { deployed: 0, skipped: 0, dryRun: options.dryRun, error: `Plan file not found: ${planFilePath}` };
+  // 1. Parse plan file (use preloaded plan when available)
+  let plan: Plan;
+  if (preloadedPlan) {
+    plan = preloadedPlan;
+  } else {
+    if (!existsSync(planFilePath)) {
+      return { deployed: 0, skipped: 0, dryRun: options.dryRun, error: `Plan file not found: ${planFilePath}` };
+    }
+    const planContent = readFileSync(planFilePath, "utf-8");
+    plan = parsePlan(planContent);
   }
-  const planContent = readFileSync(planFilePath, "utf-8");
-  const plan = parsePlan(planContent);
   const projectName = plan.project.name;
 
   // 2. Resolve DB URI
@@ -570,11 +577,17 @@ export async function executeDeploy(
     // Topological sort
     const sortedChanges = topologicalSort(pendingChanges);
 
-    // Build tag lookup: change_id -> tags attached to it
+    // Build tag lookup: change_id -> tag name strings (for registry events)
     const changeTagMap = buildChangeTagMap(plan);
+
+    // Build tag object lookup: change_id -> Tag[] (for recordTag calls)
+    const changeTagObjectMap = buildChangeTagObjectMap(plan);
 
     // Build script name lookup: change_id -> script filename (handles reworks)
     const scriptNameMap = buildScriptNameMap(plan);
+
+    // Build dependency name -> change_id map once (avoids O(C*N) rebuild per change)
+    const dependencyMap = buildDependencyMap(allChanges);
 
     // 9. Set up TUI progress dashboard
     const outputCfg = getConfig();
@@ -626,9 +639,11 @@ export async function executeDeploy(
         };
       }
 
-      const scriptContent = readFileSync(deployScript, "utf-8");
+      // Read deploy script once — reuse for auto-commit check, hash, and include resolution
+      const scriptBytes = readFileSync(deployScript);
+      const scriptContent = scriptBytes.toString("utf-8");
       const autoCommit = isAutoCommit(scriptContent);
-      const scriptHash = computeScriptHash(deployScript);
+      const scriptHash = computeScriptHashFromBytes(scriptBytes);
 
       // Resolve lock_timeout for this script
       let effectiveLockTimeout: number | undefined = options.lockTimeout;
@@ -649,13 +664,14 @@ export async function executeDeploy(
         info(`Deploying change: ${change.name}`);
       }
 
-      // Resolve snapshot includes (if any) before executing
+      // Resolve snapshot includes (if any) before executing — pass pre-read content
       const resolved = resolveDeployIncludes(
         deployScript,
         change.planned_at,
         topDir,
         undefined, // commitHash — let resolveDeployIncludes look it up from planned_at
         options.noSnapshot,
+        scriptContent,
       );
 
       // Execute via psql — use assembled content when includes were resolved,
@@ -707,7 +723,7 @@ export async function executeDeploy(
             requires: change.requires,
             conflicts: change.conflicts,
             tags: changeTagMap.get(change.change_id) ?? [],
-            dependencies: buildDependencies(change, allChanges),
+            dependencies: buildDependencies(change, dependencyMap),
           });
         } catch {
           // Best effort — don't mask the original error
@@ -747,7 +763,7 @@ export async function executeDeploy(
         requires: change.requires,
         conflicts: change.conflicts,
         tags: changeTagMap.get(change.change_id) ?? [],
-        dependencies: buildDependencies(change, allChanges),
+        dependencies: buildDependencies(change, dependencyMap),
       };
 
       // Record tracking update in its own transaction (psql runs in a
@@ -757,8 +773,8 @@ export async function executeDeploy(
         await registry.recordDeploy(recordInput);
       });
 
-      // Record any tags attached to this change
-      const changeTags = plan.tags.filter((t) => t.change_id === change.change_id);
+      // Record any tags attached to this change (O(1) lookup instead of linear scan)
+      const changeTags = changeTagObjectMap.get(change.change_id) ?? [];
       for (const tag of changeTags) {
         await registry.recordTag({
           tag_id: tag.tag_id,
@@ -961,21 +977,41 @@ function buildChangeTagMap(plan: Plan): Map<string, string[]> {
 }
 
 /**
+ * Build a mapping from change_id to full Tag objects (for recordTag calls).
+ * O(1) lookup per change replaces O(T) linear scan via plan.tags.filter.
+ */
+function buildChangeTagObjectMap(plan: Plan): Map<string, Tag[]> {
+  const map = new Map<string, Tag[]>();
+  for (const tag of plan.tags) {
+    const existing = map.get(tag.change_id) ?? [];
+    existing.push(tag);
+    map.set(tag.change_id, existing);
+  }
+  return map;
+}
+
+/**
+ * Build a name -> change_id lookup map (first occurrence wins for reworked changes).
+ * Constructed once before the deploy loop and passed to buildDependencies.
+ */
+export function buildDependencyMap(allChanges: Change[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const c of allChanges) {
+    if (!map.has(c.name)) {
+      map.set(c.name, c.change_id);
+    }
+  }
+  return map;
+}
+
+/**
  * Build dependency records for a change, resolving dependency IDs from
- * the full change set.
+ * a pre-built name-to-ID map.
  */
 function buildDependencies(
   change: Change,
-  allChanges: Change[],
+  dependencyMap: Map<string, string>,
 ): RecordDeployInput["dependencies"] {
-  // Build name -> change_id map (first occurrence wins for reworked changes)
-  const changeMap = new Map<string, string>();
-  for (const c of allChanges) {
-    if (!changeMap.has(c.name)) {
-      changeMap.set(c.name, c.change_id);
-    }
-  }
-
   const deps: RecordDeployInput["dependencies"] = [];
 
   for (const req of change.requires) {
@@ -984,7 +1020,7 @@ function buildDependencies(
     deps.push({
       type: "require",
       dependency: req,
-      dependency_id: changeMap.get(baseName) ?? null,
+      dependency_id: dependencyMap.get(baseName) ?? null,
     });
   }
 
@@ -993,7 +1029,7 @@ function buildDependencies(
     deps.push({
       type: "conflict",
       dependency: conflict,
-      dependency_id: changeMap.get(baseName) ?? null,
+      dependency_id: dependencyMap.get(baseName) ?? null,
     });
   }
 
@@ -1027,14 +1063,15 @@ export async function runDeploy(args: ParsedArgs): Promise<number> {
   // Set up signal handling
   shutdownManager.register({ quiet: false });
 
-  // Read project name from plan file for session settings
+  // Parse plan file once — reuse for DB session settings and executeDeploy
   const projectDir = resolve(options.projectDir);
   const config = loadConfig(options.projectDir);
   const planFilePath = join(projectDir, config.core.plan_file);
+  let plan: Plan | undefined;
   let projectName = "unknown";
   if (existsSync(planFilePath)) {
     const planContent = readFileSync(planFilePath, "utf-8");
-    const plan = parsePlan(planContent);
+    plan = parsePlan(planContent);
     projectName = plan.project.name;
   }
 
@@ -1053,7 +1090,7 @@ export async function runDeploy(args: ParsedArgs): Promise<number> {
     psqlRunner,
     config,
     shutdownMgr: shutdownManager,
-  });
+  }, plan);
 
   if (result.error && !result.dryRun) {
     if (result.error === "Concurrent deploy detected") {
