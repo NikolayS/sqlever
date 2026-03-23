@@ -28,30 +28,30 @@ import { runBatch } from "./commands/batch";
 
 /** Description for each supported command, used in --help output. */
 const COMMANDS: Record<string, string> = {
-  init: "Initialize project, create sqitch.conf and sqitch.plan",
+  init: "Initialize a new project directory",
   add: "Add a new migration change",
-  deploy: "Deploy changes to a database",
-  revert: "Revert changes from a database",
-  verify: "Run verify scripts against a database",
-  status: "Show deployment status",
-  log: "Show deployment history",
-  tag: "Tag the current deployment state",
-  rework: "Rework an existing change",
-  rebase: "Revert then re-deploy changes",
+  deploy: "Deploy pending changes to a database",
+  revert: "Revert deployed changes from a database",
+  verify: "Verify deployed changes against a database",
+  status: "Show current deployment status",
+  log: "Show deployment event history",
+  tag: "Tag the latest change in the plan",
+  rework: "Rework an existing change in the plan",
+  rebase: "Revert and re-deploy changes",
   bundle: "Package project for distribution",
-  checkout: "Deploy/revert changes to match a VCS branch",
-  show: "Display change/tag details or script contents",
-  plan: "Display plan contents",
-  upgrade: "Upgrade the registry schema to current version",
-  engine: "Manage database engines",
-  target: "Manage deploy targets",
-  config: "Read/write configuration",
-  analyze: "Analyze migration SQL for dangerous patterns",
-  explain: "Explain what a migration does in plain language",
-  review: "Review migrations for issues",
+  checkout: "Deploy or revert to match a VCS branch",
+  show: "Show change, tag, or script details",
+  plan: "Show the contents of the plan file",
+  upgrade: "Upgrade the registry schema",
+  engine: "Manage database engine configuration",
+  target: "Manage deploy target configuration",
+  config: "Get or set configuration values",
+  analyze: "Analyze migration SQL for risky patterns",
+  explain: "Explain a migration in plain language",
+  review: "Review migrations for common issues",
   batch: "Manage batched background data migrations",
   diff: "Show differences between plan states",
-  doctor: "Validate project setup, plan file, and script consistency",
+  doctor: "Check project setup for problems",
   help: "Show help for a command",
 };
 
@@ -257,7 +257,7 @@ function stubHandler(command: string): never {
 // Main
 // ---------------------------------------------------------------------------
 
-export function main(argv: string[] = process.argv.slice(2)): void {
+export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
   const args = parseArgs(argv);
 
   // --version takes precedence (matches Sqitch behavior)
@@ -309,179 +309,122 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   }
 
   // --- Dispatch to implemented commands ---
-  if (args.command === "init") {
-    runInit(args).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`sqlever init: ${msg}\n`);
-      process.exit(1);
-    });
-    return;
-  }
-
-  if (args.command === "add") {
-    // Check if --expand flag is present
-    if (args.rest.includes("--expand")) {
-      const expandOpts = parseExpandArgs(args.rest);
-      expandOpts.topDir = args.topDir;
-      runExpandAdd(expandOpts).catch((err: unknown) => {
-        process.stderr.write(`sqlever add --expand: ${err instanceof Error ? err.message : String(err)}\n`);
-        process.exit(1);
-      });
-      return;
-    }
-    const addOpts = parseAddArgs(args.rest);
-    addOpts.topDir = args.topDir;
-    runAdd(addOpts).catch((err: unknown) => {
-      process.stderr.write(`sqlever add: ${err instanceof Error ? err.message : String(err)}\n`);
-      process.exit(1);
-    });
-    return;
-  }
-
-  if (args.command === "deploy") {
-    runDeploy(args).then((exitCode) => {
-      if (exitCode !== 0) {
-        process.exit(exitCode);
-      }
-    }).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`sqlever deploy: ${msg}\n`);
-      process.exit(1);
-    });
-    return;
-  }
-
-  if (args.command === "log") {
-    runLogCommand(args).catch((err: unknown) => {
-      process.stderr.write(`sqlever log: ${err instanceof Error ? err.message : String(err)}\n`);
-      process.exit(1);
-    });
-    return;
-  }
-
-  if (args.command === "revert") {
-    runRevert(args)
-      .then((exitCode) => {
-        if (exitCode !== 0) process.exit(exitCode);
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`sqlever revert: ${msg}\n`);
-        process.exit(1);
-      });
-    return;
-  }
-
-  if (args.command === "tag") {
-    const tagOpts = parseTagArgs(args.rest);
-    tagOpts.topDir = args.topDir;
-    runTag(tagOpts).catch((err: unknown) => {
-      process.stderr.write(`sqlever tag: ${err instanceof Error ? err.message : String(err)}\n`);
-      process.exit(1);
-    });
-    return;
-  }
-
-  if (args.command === "rework") {
-    const reworkOpts = parseReworkArgs(args.rest);
-    reworkOpts.topDir = args.topDir;
-    runRework(reworkOpts).catch((err: unknown) => {
-      process.stderr.write(`sqlever rework: ${err instanceof Error ? err.message : String(err)}\n`);
-      process.exit(1);
-    });
-    return;
-  }
-
-  if (args.command === "show") {
-    const showOpts = parseShowArgs(args.rest);
-    if (args.topDir !== undefined) showOpts.topDir = args.topDir;
-    if (args.planFile !== undefined) showOpts.planFile = args.planFile;
-    try {
-      runShow(showOpts);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`sqlever show: ${msg}\n`);
-      process.exit(1);
-    }
-    return;
-  }
-
-  if (args.command === "verify") {
-    runVerify(args).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`sqlever verify: ${msg}\n`);
-      process.exit(1);
-    });
-    return;
-  }
-
-  if (args.command === "status") {
-    runStatus(args).catch((err: unknown) => {
-      process.stderr.write(`sqlever status: ${err instanceof Error ? err.message : String(err)}\n`);
-      process.exit(1);
-    });
-    return;
-  }
-
-  if (args.command === "plan") {
-    runPlan(args);
-    return;
-  }
-
-  if (args.command === "analyze") {
-    const analyzeOpts = parseAnalyzeArgs(args.rest);
-    if (args.topDir !== undefined) analyzeOpts.topDir = args.topDir;
-    if (args.planFile !== undefined) analyzeOpts.planFile = args.planFile;
-    runAnalyze(analyzeOpts)
-      .then((result) => { if (result.exitCode !== 0) process.exit(result.exitCode); })
-      .catch((err: unknown) => { process.stderr.write(`sqlever analyze: ${err instanceof Error ? err.message : String(err)}\n`); process.exit(1); });
-    return;
-  }
-
-  if (args.command === "explain") {
-    const explainOpts = parseExplainArgs(args.rest);
-    runExplain(explainOpts)
-      .then((exitCode) => { if (exitCode !== 0) process.exit(exitCode); })
-      .catch((err: unknown) => { process.stderr.write(`sqlever explain: ${err instanceof Error ? err.message : String(err)}\n`); process.exit(1); });
-    return;
-  }
-
-  if (args.command === "doctor") {
-    const exitCode = runDoctor(args);
+  // All commands are dispatched via a single try/catch with consistent
+  // error formatting: "sqlever <command>: <message>".
+  const command = args.command;
+  try {
+    const exitCode = await dispatchCommand(command, args);
     if (exitCode !== 0) process.exit(exitCode);
-    return;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`sqlever ${command}: ${msg}\n`);
+    process.exit(1);
   }
+}
 
-  if (args.command === "diff") {
-    runDiff(args).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`sqlever diff: ${msg}\n`);
-      process.exit(1);
-    });
-    return;
+/**
+ * Dispatch a command and return its exit code (0 = success).
+ *
+ * Commands that don't return an exit code return 0 on success.
+ * Errors are propagated as exceptions to the caller.
+ */
+async function dispatchCommand(command: string, args: ParsedArgs): Promise<number> {
+  switch (command) {
+    case "init":
+      await runInit(args);
+      return 0;
+
+    case "add": {
+      if (args.rest.includes("--expand")) {
+        const expandOpts = parseExpandArgs(args.rest);
+        expandOpts.topDir = args.topDir;
+        await runExpandAdd(expandOpts);
+      } else {
+        const addOpts = parseAddArgs(args.rest);
+        addOpts.topDir = args.topDir;
+        await runAdd(addOpts);
+      }
+      return 0;
+    }
+
+    case "deploy":
+      return await runDeploy(args);
+
+    case "log":
+      await runLogCommand(args);
+      return 0;
+
+    case "revert":
+      return await runRevert(args);
+
+    case "tag": {
+      const tagOpts = parseTagArgs(args.rest);
+      tagOpts.topDir = args.topDir;
+      await runTag(tagOpts);
+      return 0;
+    }
+
+    case "rework": {
+      const reworkOpts = parseReworkArgs(args.rest);
+      reworkOpts.topDir = args.topDir;
+      await runRework(reworkOpts);
+      return 0;
+    }
+
+    case "show": {
+      const showOpts = parseShowArgs(args.rest);
+      if (args.topDir !== undefined) showOpts.topDir = args.topDir;
+      if (args.planFile !== undefined) showOpts.planFile = args.planFile;
+      runShow(showOpts);
+      return 0;
+    }
+
+    case "verify":
+      return await runVerify(args);
+
+    case "status":
+      await runStatus(args);
+      return 0;
+
+    case "plan":
+      runPlan(args);
+      return 0;
+
+    case "analyze": {
+      const analyzeOpts = parseAnalyzeArgs(args.rest);
+      if (args.topDir !== undefined) analyzeOpts.topDir = args.topDir;
+      if (args.planFile !== undefined) analyzeOpts.planFile = args.planFile;
+      const result = await runAnalyze(analyzeOpts);
+      return result.exitCode;
+    }
+
+    case "explain": {
+      const explainOpts = parseExplainArgs(args.rest);
+      return await runExplain(explainOpts);
+    }
+
+    case "doctor":
+      return runDoctor(args);
+
+    case "diff":
+      await runDiff(args);
+      return 0;
+
+    case "review": {
+      const reviewOpts = parseReviewArgs(args.rest);
+      if (args.topDir !== undefined) reviewOpts.topDir = args.topDir;
+      if (args.planFile !== undefined) reviewOpts.planFile = args.planFile;
+      const reviewResult = await runReviewCommand(reviewOpts);
+      return reviewResult.exitCode;
+    }
+
+    case "batch":
+      await runBatch(args);
+      return 0;
+
+    default:
+      stubHandler(command);
   }
-
-  if (args.command === "review") {
-    const reviewOpts = parseReviewArgs(args.rest);
-    if (args.topDir !== undefined) reviewOpts.topDir = args.topDir;
-    if (args.planFile !== undefined) reviewOpts.planFile = args.planFile;
-    runReviewCommand(reviewOpts)
-      .then((result) => { if (result.exitCode !== 0) process.exit(result.exitCode); })
-      .catch((err: unknown) => { process.stderr.write(`sqlever review: ${err instanceof Error ? err.message : String(err)}\n`); process.exit(1); });
-    return;
-  }
-
-  if (args.command === "batch") {
-    runBatch(args).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`sqlever batch: ${msg}\n`);
-      process.exit(1);
-    });
-    return;
-  }
-
-  // Known command — stub handler
-  stubHandler(args.command);
 }
 
 // Run when executed directly (not when imported by tests)

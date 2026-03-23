@@ -14,7 +14,7 @@ import { join, resolve } from "node:path";
 import { loadConfig, type MergedConfig } from "../config/index";
 import { parsePlan } from "../plan/parser";
 import type { Change, Tag } from "../plan/types";
-import { info, error, json, getConfig } from "../output";
+import { info, json, getConfig } from "../output";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -207,19 +207,17 @@ export function runShow(
 ): void {
   // Validate type
   if (!opts.type || !VALID_TYPES.has(opts.type)) {
-    error(
-      `Error: invalid show type '${opts.type || ""}'. ` +
+    throw new Error(
+      `invalid show type '${opts.type || ""}'. ` +
       "Expected one of: deploy, revert, verify, change, tag.",
     );
-    process.exit(1);
   }
 
   // Validate name
   if (!opts.name) {
-    error(
-      "Error: name is required. Usage: sqlever show <type> <name>",
+    throw new Error(
+      "name is required. Usage: sqlever show <type> <name>",
     );
-    process.exit(1);
   }
 
   // Validate name format for script types to prevent path traversal.
@@ -258,8 +256,7 @@ export function runShow(
     const content = readScript(scriptPath);
 
     if (content === null) {
-      error(`Error: ${opts.type} script not found at ${scriptPath}`);
-      process.exit(1);
+      throw new Error(`${opts.type} script not found at ${scriptPath}`);
     }
 
     if (outputCfg.format === "json") {
@@ -279,14 +276,12 @@ export function runShow(
   // Metadata types: change, tag
   if (opts.type === "change") {
     if (!existsSync(planPath)) {
-      error(`Error: plan file not found at ${planPath}`);
-      process.exit(1);
+      throw new Error(`plan file not found at ${planPath}`);
     }
 
     const change = findChange(planPath, opts.name);
     if (!change) {
-      error(`Error: change '${opts.name}' not found in plan`);
-      process.exit(1);
+      throw new Error(`change '${opts.name}' not found in plan`);
     }
 
     if (outputCfg.format === "json") {
@@ -299,14 +294,12 @@ export function runShow(
 
   if (opts.type === "tag") {
     if (!existsSync(planPath)) {
-      error(`Error: plan file not found at ${planPath}`);
-      process.exit(1);
+      throw new Error(`plan file not found at ${planPath}`);
     }
 
     const tag = findTag(planPath, opts.name);
     if (!tag) {
-      error(`Error: tag '${opts.name}' not found in plan`);
-      process.exit(1);
+      throw new Error(`tag '${opts.name}' not found in plan`);
     }
 
     if (outputCfg.format === "json") {

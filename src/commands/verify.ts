@@ -21,7 +21,7 @@ import {
   type Change as RegistryChange,
 } from "../db/registry";
 import { PsqlRunner, type PsqlRunResult } from "../psql";
-import { info, error as logError, verbose } from "../output";
+import { info, verbose } from "../output";
 import { resolveTargetUri, withDatabase } from "./shared";
 
 // ---------------------------------------------------------------------------
@@ -296,7 +296,7 @@ export async function runVerify(
   opts?: {
     psqlRunner?: PsqlRunner;
   },
-): Promise<void> {
+): Promise<number> {
   const options = parseVerifyOptions(args);
   const topDir = resolve(options.topDir);
 
@@ -308,27 +308,19 @@ export async function runVerify(
     ? resolve(options.planFile)
     : join(topDir, config.core.plan_file);
 
-  let plan: Plan;
-  try {
-    const planContent = readFileSync(planFilePath, "utf-8");
-    plan = parsePlan(planContent);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logError(`Failed to read plan file: ${msg}`);
-    process.exit(1);
-  }
+  const planContent = readFileSync(planFilePath, "utf-8");
+  const plan = parsePlan(planContent);
 
   // Resolve target URI
   const targetUri = resolveTargetUri(config, options.dbUri, options.target);
   if (!targetUri) {
-    logError(
-      "No database target specified. Use --db-uri or configure a target in sqitch.conf.",
+    throw new Error(
+      "no database target specified. Use --db-uri or configure a target in sqitch.conf.",
     );
-    process.exit(1);
   }
 
   // 2. Connect to database, run verification, disconnect
-  await withDatabase(
+  return await withDatabase(
     targetUri,
     { command: "verify", project: plan.project.name },
     async (db) => {
@@ -339,26 +331,19 @@ export async function runVerify(
 
       if (deployedChanges.length === 0) {
         info("Nothing to verify. No changes are deployed.");
-        return;
+        return 0;
       }
 
       // 4. Filter to --from/--to range
-      let changesToVerify: RegistryChange[];
-      try {
-        changesToVerify = filterChangesForRange(
-          deployedChanges,
-          options.fromChange,
-          options.toChange,
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logError(msg);
-        process.exit(1);
-      }
+      const changesToVerify = filterChangesForRange(
+        deployedChanges,
+        options.fromChange,
+        options.toChange,
+      );
 
       if (changesToVerify.length === 0) {
         info("Nothing to verify in the specified range.");
-        return;
+        return 0;
       }
 
       // 5. Execute verify scripts
@@ -396,9 +381,7 @@ export async function runVerify(
       info(formatVerifyResult(verifyResult));
 
       // 7. Exit code 3 if any failures (SPEC R6)
-      if (verifyResult.failed > 0) {
-        process.exit(EXIT_CODE_VERIFY_FAILED);
-      }
+      return verifyResult.failed > 0 ? EXIT_CODE_VERIFY_FAILED : 0;
     },
   );
 }

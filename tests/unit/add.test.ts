@@ -564,129 +564,52 @@ describe("runAdd", () => {
     );
     const cfg = testConfig(tmpDir);
 
-    // Mock process.exit to capture exit
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runAdd(
-        {
-          name: "create_users",
-          note: "duplicate",
-          requires: [],
-          conflicts: [],
-          noVerify: false,
-        },
+    await expect(
+      runAdd(
+        { name: "create_users", note: "duplicate", requires: [], conflicts: [], noVerify: false },
         cfg,
         TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+      ),
+    ).rejects.toThrow("already exists");
   });
 
   it("errors when plan file does not exist", async () => {
     // Don't create sqitch.plan
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runAdd(
-        {
-          name: "create_users",
-          note: "",
-          requires: [],
-          conflicts: [],
-          noVerify: false,
-        },
+    await expect(
+      runAdd(
+        { name: "create_users", note: "", requires: [], conflicts: [], noVerify: false },
         cfg,
         TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+      ),
+    ).rejects.toThrow("plan file not found");
   });
 
   it("errors on invalid change name", async () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runAdd(
-        {
-          name: "123-invalid",
-          note: "",
-          requires: [],
-          conflicts: [],
-          noVerify: false,
-        },
+    await expect(
+      runAdd(
+        { name: "123-invalid", note: "", requires: [], conflicts: [], noVerify: false },
         cfg,
         TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+      ),
+    ).rejects.toThrow("invalid change name");
   });
 
   it("errors when no change name provided", async () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runAdd(
-        {
-          name: "",
-          note: "",
-          requires: [],
-          conflicts: [],
-          noVerify: false,
-        },
+    await expect(
+      runAdd(
+        { name: "", note: "", requires: [], conflicts: [], noVerify: false },
         cfg,
         TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+      ),
+    ).rejects.toThrow("change name is required");
   });
 
   it("skips verify file when --no-verify is set", async () => {
@@ -858,32 +781,13 @@ describe("runAdd", () => {
     writeFileSync(join(tmpDir, "deploy", "create_users.sql"), "existing", "utf-8");
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runAdd(
-        {
-          name: "create_users",
-          note: "",
-          requires: [],
-          conflicts: [],
-          noVerify: false,
-        },
+    await expect(
+      runAdd(
+        { name: "create_users", note: "", requires: [], conflicts: [], noVerify: false },
         cfg,
         TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+      ),
+    ).rejects.toThrow("deploy script already exists");
   });
 
   it("correctly formats plan entry with multiple deps", async () => {

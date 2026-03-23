@@ -4,7 +4,7 @@
 // event type, pagination (limit/offset), ordering, and JSON output.
 
 import { Registry, type Event } from "../db/registry";
-import { info, error, json, table, verbose, getConfig } from "../output";
+import { info, json, table, verbose, getConfig } from "../output";
 import type { ParsedArgs } from "../cli";
 import { loadConfig } from "../config/index";
 import { resolveTargetUri, withDatabase } from "./shared";
@@ -208,8 +208,7 @@ export async function runLogCommand(args: ParsedArgs): Promise<void> {
     ?? undefined;
 
   if (!dbUri) {
-    error("Error: no database URI specified. Use --db-uri or configure a target.");
-    process.exit(1);
+    throw new Error("no database URI specified. Use --db-uri or configure a target.");
   }
 
   // Resolve project name from config

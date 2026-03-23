@@ -10,7 +10,7 @@ import { loadConfig, type MergedConfig } from "../config/index";
 import { computeChangeId, type ChangeIdInput } from "../plan/types";
 import { appendChange } from "../plan/writer";
 import type { Change } from "../plan/types";
-import { info, error, verbose } from "../output";
+import { info, verbose } from "../output";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -312,18 +312,16 @@ export async function runAdd(
 
   // Validate change name
   if (!opts.name) {
-    error("Error: change name is required. Usage: sqlever add <name>");
-    process.exit(1);
+    throw new Error("change name is required. Usage: sqlever add <name>");
   }
 
   // Validate change name format (alphanumeric, underscores, hyphens)
   if (!/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(opts.name)) {
-    error(
-      `Error: invalid change name '${opts.name}'. ` +
+    throw new Error(
+      `invalid change name '${opts.name}'. ` +
       "Names must start with a letter or underscore and contain only " +
       "letters, digits, underscores, and hyphens.",
     );
-    process.exit(1);
   }
 
   // Load config if not provided
@@ -338,19 +336,17 @@ export async function runAdd(
 
   // Ensure plan file exists
   if (!existsSync(planPath)) {
-    error(`Error: plan file not found at ${planPath}. Run 'sqlever init' first.`);
-    process.exit(1);
+    throw new Error(`plan file not found at ${planPath}. Run 'sqlever init' first.`);
   }
 
   // Read existing plan to check for duplicates and get last change ID
   const planInfo = readPlanInfo(planPath);
 
   if (planInfo.existingNames.has(opts.name)) {
-    error(
-      `Error: change '${opts.name}' already exists in the plan. ` +
+    throw new Error(
+      `change '${opts.name}' already exists in the plan. ` +
       "Use 'sqlever rework' to create a new version of an existing change.",
     );
-    process.exit(1);
   }
 
   // Get planner identity
@@ -402,16 +398,13 @@ export async function runAdd(
   const verifyPath = join(verifyDir, `${opts.name}.sql`);
 
   if (existsSync(deployPath)) {
-    error(`Error: deploy script already exists at ${deployPath}`);
-    process.exit(1);
+    throw new Error(`deploy script already exists at ${deployPath}`);
   }
   if (existsSync(revertPath)) {
-    error(`Error: revert script already exists at ${revertPath}`);
-    process.exit(1);
+    throw new Error(`revert script already exists at ${revertPath}`);
   }
   if (!opts.noVerify && existsSync(verifyPath)) {
-    error(`Error: verify script already exists at ${verifyPath}`);
-    process.exit(1);
+    throw new Error(`verify script already exists at ${verifyPath}`);
   }
 
   writeFileSync(deployPath, deployTemplate(opts.name, opts.requires), "utf-8");

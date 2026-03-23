@@ -13,7 +13,7 @@ import { loadConfig, type MergedConfig } from "../config/index";
 import { computeTagId, type TagIdInput, type Tag } from "../plan/types";
 import { appendTag } from "../plan/writer";
 import { parsePlan } from "../plan/parser";
-import { info, error, verbose } from "../output";
+import { info, verbose } from "../output";
 import { getPlannerIdentity, nowTimestamp } from "./add";
 
 // ---------------------------------------------------------------------------
@@ -105,20 +105,18 @@ export async function runTag(
 
   // Validate tag name
   if (!opts.name) {
-    error("Error: tag name is required. Usage: sqlever tag <name> [-n note]");
-    process.exit(1);
+    throw new Error("tag name is required. Usage: sqlever tag <name> [-n note]");
   }
 
   // Strip leading @ if the user included it
   const tagName = opts.name.startsWith("@") ? opts.name.slice(1) : opts.name;
 
   if (!isValidTagName(tagName)) {
-    error(
-      `Error: invalid tag name '${tagName}'. ` +
+    throw new Error(
+      `invalid tag name '${tagName}'. ` +
       "Names must start with a letter or underscore and contain only " +
       "letters, digits, underscores, hyphens, and dots.",
     );
-    process.exit(1);
   }
 
   // Load config if not provided
@@ -130,8 +128,7 @@ export async function runTag(
 
   // Ensure plan file exists
   if (!existsSync(planPath)) {
-    error(`Error: plan file not found at ${planPath}. Run 'sqlever init' first.`);
-    process.exit(1);
+    throw new Error(`plan file not found at ${planPath}. Run 'sqlever init' first.`);
   }
 
   // Parse the plan file to get project info and the last change
@@ -140,18 +137,16 @@ export async function runTag(
 
   // Must have at least one change to tag
   if (plan.changes.length === 0) {
-    error("Error: no changes in plan. Add a change before tagging.");
-    process.exit(1);
+    throw new Error("no changes in plan. Add a change before tagging.");
   }
 
   // Check for duplicate tag name
   const existingTagNames = new Set(plan.tags.map((t) => t.name));
   if (existingTagNames.has(tagName)) {
-    error(
-      `Error: tag '@${tagName}' already exists in the plan. ` +
+    throw new Error(
+      `tag '@${tagName}' already exists in the plan. ` +
       "Tag names must be unique.",
     );
-    process.exit(1);
   }
 
   // The tag attaches to the last change

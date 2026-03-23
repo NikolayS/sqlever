@@ -375,107 +375,29 @@ describe("runShow", () => {
   });
 
   it("errors on invalid show type", () => {
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      runShow({ type: "invalid" as any, name: "foo" });
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    expect(() => runShow({ type: "invalid" as any, name: "foo" })).toThrow("invalid show type");
   });
 
   it("errors when no name is provided", () => {
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      runShow({ type: "deploy", name: "" });
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    expect(() => runShow({ type: "deploy", name: "" })).toThrow("name is required");
   });
 
   it("errors when deploy script not found", () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
-
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      runShow({ type: "deploy", name: "nonexistent", topDir: tmpDir }, cfg);
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    expect(() => runShow({ type: "deploy", name: "nonexistent", topDir: tmpDir }, cfg)).toThrow("script not found");
   });
 
   it("errors when change not found in plan", () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
-
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      runShow({ type: "change", name: "nonexistent", topDir: tmpDir }, cfg);
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    expect(() => runShow({ type: "change", name: "nonexistent", topDir: tmpDir }, cfg)).toThrow("not found in plan");
   });
 
   it("errors when tag not found in plan", () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
-
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      runShow({ type: "tag", name: "nonexistent", topDir: tmpDir }, cfg);
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    expect(() => runShow({ type: "tag", name: "nonexistent", topDir: tmpDir }, cfg)).toThrow("not found in plan");
   });
 
   it("prints deploy script to stdout", () => {

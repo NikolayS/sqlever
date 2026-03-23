@@ -286,26 +286,9 @@ describe("runTag", () => {
     );
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runTag(
-        { name: "v1.0", note: "duplicate" },
-        cfg,
-        TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    await expect(
+      runTag({ name: "v1.0", note: "duplicate" }, cfg, TEST_ENV),
+    ).rejects.toThrow("already exists");
   });
 
   it("errors when plan has no changes", async () => {
@@ -318,104 +301,36 @@ describe("runTag", () => {
     );
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runTag(
-        { name: "v1.0", note: "" },
-        cfg,
-        TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    await expect(
+      runTag({ name: "v1.0", note: "" }, cfg, TEST_ENV),
+    ).rejects.toThrow("no changes in plan");
   });
 
   it("errors when plan file does not exist", async () => {
     // Don't create a plan file
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runTag(
-        { name: "v1.0", note: "" },
-        cfg,
-        TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    await expect(
+      runTag({ name: "v1.0", note: "" }, cfg, TEST_ENV),
+    ).rejects.toThrow("plan file not found");
   });
 
   it("errors when no tag name provided", async () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runTag(
-        { name: "", note: "" },
-        cfg,
-        TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    await expect(
+      runTag({ name: "", note: "" }, cfg, TEST_ENV),
+    ).rejects.toThrow("tag name is required");
   });
 
   it("errors on invalid tag name", async () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
 
-    const origExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code: number) => {
-      exitCode = code;
-      throw new Error(`process.exit(${code})`);
-    }) as never;
-
-    try {
-      await runTag(
-        { name: "123-invalid", note: "" },
-        cfg,
-        TEST_ENV,
-      );
-    } catch {
-      // Expected
-    } finally {
-      process.exit = origExit;
-    }
-
-    expect(exitCode).toBe(1);
+    await expect(
+      runTag({ name: "123-invalid", note: "" }, cfg, TEST_ENV),
+    ).rejects.toThrow("invalid tag name");
   });
 
   it("tags the last change in a multi-change plan", async () => {

@@ -667,7 +667,7 @@ describe("status CLI integration", () => {
       tempDir,
     );
     expect(exitCode).not.toBe(0);
-    expect(stderr).toContain("Plan file not found");
+    expect(stderr).toContain("plan file not found");
   });
 
   test("shows plan-only status (no DB) when plan exists but no target", async () => {

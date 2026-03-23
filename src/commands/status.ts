@@ -13,7 +13,7 @@ import { loadConfig } from "../config/index";
 import { parsePlan } from "../plan/parser";
 import { computeScriptHash, type Plan } from "../plan/types";
 import type { Change as RegistryChange } from "../db/registry";
-import { info, error, json as jsonOut } from "../output";
+import { info, json as jsonOut } from "../output";
 import type { ParsedArgs } from "../cli";
 import { resolveTargetUri, withDatabase } from "./shared";
 // Re-exported from shared for backward compatibility (tests import from status).
@@ -273,9 +273,7 @@ export async function runStatus(args: ParsedArgs): Promise<void> {
     : join(topDir, config.core.plan_file);
 
   if (!existsSync(planFilePath)) {
-    error(`Plan file not found: ${planFilePath}`);
-    error("Run 'sqlever init' to initialize a project.");
-    process.exit(1);
+    throw new Error(`plan file not found: ${planFilePath}. Run 'sqlever init' to initialize a project.`);
   }
 
   const planContent = readFileSync(planFilePath, "utf-8");
