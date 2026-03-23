@@ -13,7 +13,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 // Import volatile function set from SA002 to reuse the detection logic
 const VOLATILE_FUNCTIONS: ReadonlySet<string> = new Set([
@@ -36,37 +36,40 @@ const VOLATILE_FUNCTIONS: ReadonlySet<string> = new Set([
  * Check if an expression contains a volatile function call.
  * Returns true if ANY function in the expression is volatile.
  */
-function containsVolatileFunction(node: any): boolean {
-  if (!node || typeof node !== "object") return false;
+function containsVolatileFunction(n: unknown): boolean {
+  if (!n || typeof n !== "object") return false;
+  const nd = node(n);
 
-  if (node.FuncCall) {
-    const funcNames = node.FuncCall.funcname ?? [];
-    for (const fn of funcNames) {
-      const name = fn?.String?.sval?.toLowerCase();
-      if (name && VOLATILE_FUNCTIONS.has(name)) {
+  if (nd.FuncCall) {
+    const funcNode = node(nd.FuncCall);
+    for (const fn of nodes(funcNode.funcname)) {
+      const name = (node(fn).String as Record<string, unknown> | undefined);
+      const sval = name ? String(node(name).sval ?? "").toLowerCase() : "";
+      if (sval && VOLATILE_FUNCTIONS.has(sval)) {
         return true;
       }
     }
     // Check function arguments
-    for (const arg of node.FuncCall.args ?? []) {
+    for (const arg of nodes(funcNode.args)) {
       if (containsVolatileFunction(arg)) return true;
     }
     return false;
   }
 
-  if (node.TypeCast) {
-    return containsVolatileFunction(node.TypeCast.arg);
+  if (nd.TypeCast) {
+    return containsVolatileFunction(node(nd.TypeCast).arg);
   }
 
-  if (node.A_Expr) {
+  if (nd.A_Expr) {
+    const expr = node(nd.A_Expr);
     return (
-      containsVolatileFunction(node.A_Expr.lexpr) ||
-      containsVolatileFunction(node.A_Expr.rexpr)
+      containsVolatileFunction(expr.lexpr) ||
+      containsVolatileFunction(expr.rexpr)
     );
   }
 
-  if (node.CoalesceExpr) {
-    for (const arg of node.CoalesceExpr.args ?? []) {
+  if (nd.CoalesceExpr) {
+    for (const arg of nodes(node(nd.CoalesceExpr).args)) {
       if (containsVolatileFunction(arg)) return true;
     }
   }
@@ -92,21 +95,20 @@ export const SA002b: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.AlterTableStmt) continue;
 
-      const alterStmt = stmt.AlterTableStmt;
+      const alterStmt = node(stmt.AlterTableStmt);
       if (alterStmt.objtype !== "OBJECT_TABLE") continue;
 
-      const cmds = alterStmt.cmds ?? [];
-      for (const cmdEntry of cmds) {
-        const cmd = cmdEntry.AlterTableCmd;
-        if (!cmd || cmd.subtype !== "AT_AddColumn") continue;
+      for (const cmdEntry of nodes(alterStmt.cmds)) {
+        const cmd = node(cmdEntry.AlterTableCmd);
+        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AddColumn") continue;
 
-        const colDef = cmd.def?.ColumnDef;
+        const colDef = node(cmd.def).ColumnDef;
         if (!colDef) continue;
+        const colDefNode = node(colDef);
 
-        const constraints = colDef.constraints ?? [];
-        for (const c of constraints) {
-          const constraint = c.Constraint;
-          if (!constraint || constraint.contype !== "CONSTR_DEFAULT") continue;
+        for (const c of nodes(colDefNode.constraints)) {
+          const constraint = node(c.Constraint);
+          if (!c.Constraint || constraint.contype !== "CONSTR_DEFAULT") continue;
 
           const rawExpr = constraint.raw_expr;
 
@@ -119,8 +121,8 @@ export const SA002b: Rule = {
             stmtEntry.stmt_location ?? 0,
             filePath,
           );
-          const tableName = alterStmt.relation?.relname ?? "unknown";
-          const colName = colDef.colname ?? "unknown";
+          const tableName = node(alterStmt.relation).relname ?? "unknown";
+          const colName = colDefNode.colname ?? "unknown";
 
           findings.push({
             ruleId: "SA002b",

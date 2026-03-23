@@ -11,7 +11,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA006: Rule = {
   id: "SA006",
@@ -28,13 +28,12 @@ export const SA006: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.AlterTableStmt) continue;
 
-      const alterStmt = stmt.AlterTableStmt;
+      const alterStmt = node(stmt.AlterTableStmt);
       if (alterStmt.objtype !== "OBJECT_TABLE") continue;
 
-      const cmds = alterStmt.cmds ?? [];
-      for (const cmdEntry of cmds) {
-        const cmd = cmdEntry.AlterTableCmd;
-        if (!cmd || cmd.subtype !== "AT_DropColumn") continue;
+      for (const cmdEntry of nodes(alterStmt.cmds)) {
+        const cmd = node(cmdEntry.AlterTableCmd);
+        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_DropColumn") continue;
 
         const location = offsetToLocation(
           rawSql,
@@ -42,7 +41,7 @@ export const SA006: Rule = {
           filePath,
         );
 
-        const tableName = alterStmt.relation?.relname ?? "unknown";
+        const tableName = node(alterStmt.relation).relname ?? "unknown";
         const colName = cmd.name ?? "unknown";
 
         findings.push({

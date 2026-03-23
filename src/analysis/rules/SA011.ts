@@ -16,7 +16,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node } from "../types.js";
 
 export const SA011: Rule = {
   id: "SA011",
@@ -45,14 +45,14 @@ export const SA011: Rule = {
       let dmlType: "UPDATE" | "DELETE" | undefined;
 
       if (stmt?.UpdateStmt) {
-        const rel = stmt.UpdateStmt.relation;
-        tableName = rel?.relname;
-        schemaName = rel?.schemaname;
+        const rel = node(node(stmt.UpdateStmt).relation);
+        tableName = rel?.relname as string | undefined;
+        schemaName = rel?.schemaname as string | undefined;
         dmlType = "UPDATE";
       } else if (stmt?.DeleteStmt) {
-        const rel = stmt.DeleteStmt.relation;
-        tableName = rel?.relname;
-        schemaName = rel?.schemaname;
+        const rel = node(node(stmt.DeleteStmt).relation);
+        tableName = rel?.relname as string | undefined;
+        schemaName = rel?.schemaname as string | undefined;
         dmlType = "DELETE";
       }
 

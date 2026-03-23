@@ -21,15 +21,15 @@
  * risky DDL in the same file, this rule does not fire.
  */
 
-import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import type { Rule, Finding, AnalysisContext, DefElem } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 /**
  * Check if a statement is a SET lock_timeout.
  */
-function isLockTimeoutSet(stmt: any): boolean {
+function isLockTimeoutSet(stmt: Record<string, unknown>): boolean {
   if (!stmt?.VariableSetStmt) return false;
-  const setStmt = stmt.VariableSetStmt;
+  const setStmt = node(stmt.VariableSetStmt);
   return (
     setStmt.kind === "VAR_SET_VALUE" && setStmt.name === "lock_timeout"
   );
@@ -38,16 +38,16 @@ function isLockTimeoutSet(stmt: any): boolean {
 /**
  * Check if a statement is risky DDL that takes a heavy lock.
  */
-function isRiskyDDL(stmt: any): { risky: boolean; description: string } {
+function isRiskyDDL(stmt: Record<string, unknown>): { risky: boolean; description: string } {
   // ALTER TABLE (most operations take AccessExclusiveLock)
   if (stmt?.AlterTableStmt) {
-    const tableName = stmt.AlterTableStmt.relation?.relname ?? "unknown";
+    const tableName = node(node(stmt.AlterTableStmt).relation).relname ?? "unknown";
     return { risky: true, description: `ALTER TABLE on "${tableName}"` };
   }
 
   // DROP TABLE
   if (stmt?.DropStmt) {
-    const dropStmt = stmt.DropStmt;
+    const dropStmt = node(stmt.DropStmt);
     if (dropStmt.removeType === "OBJECT_TABLE") {
       return { risky: true, description: "DROP TABLE" };
     }
@@ -58,7 +58,7 @@ function isRiskyDDL(stmt: any): { risky: boolean; description: string } {
   }
 
   // CREATE INDEX without CONCURRENTLY (ShareLock)
-  if (stmt?.IndexStmt && !stmt.IndexStmt.concurrent) {
+  if (stmt?.IndexStmt && !node(stmt.IndexStmt).concurrent) {
     return { risky: true, description: "CREATE INDEX" };
   }
 
@@ -74,9 +74,9 @@ function isRiskyDDL(stmt: any): { risky: boolean; description: string } {
 
   // VACUUM FULL (AccessExclusiveLock)
   if (stmt?.VacuumStmt) {
-    const options = (stmt.VacuumStmt.options ?? []) as any[];
+    const options = nodes(node(stmt.VacuumStmt).options) as unknown as DefElem[];
     const hasFull = options.some(
-      (opt: any) => opt?.DefElem?.defname === "full",
+      (opt) => opt?.DefElem?.defname === "full",
     );
     if (hasFull) {
       return { risky: true, description: "VACUUM FULL" };
@@ -85,9 +85,9 @@ function isRiskyDDL(stmt: any): { risky: boolean; description: string } {
 
   // REINDEX without CONCURRENTLY (AccessExclusiveLock)
   if (stmt?.ReindexStmt) {
-    const params = (stmt.ReindexStmt.params ?? []) as any[];
+    const params = nodes(node(stmt.ReindexStmt).params) as unknown as DefElem[];
     const hasConcurrently = params.some(
-      (p: any) => p?.DefElem?.defname === "concurrently",
+      (p) => p?.DefElem?.defname === "concurrently",
     );
     if (!hasConcurrently) {
       return { risky: true, description: "REINDEX" };

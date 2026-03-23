@@ -15,7 +15,6 @@ import { existsSync, readFileSync } from "node:fs";
 import type { ParsedArgs } from "../cli";
 import { loadConfig } from "../config/index";
 import { parsePlan } from "../plan/parser";
-import type { Plan } from "../plan/types";
 import {
   Registry,
   type Change as RegistryChange,

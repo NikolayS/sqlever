@@ -9,8 +9,8 @@
  * table/index. PG 12+ supports REINDEX CONCURRENTLY.
  */
 
-import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import type { Rule, Finding, AnalysisContext, DefElem } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA019: Rule = {
   id: "SA019",
@@ -27,12 +27,12 @@ export const SA019: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.ReindexStmt) continue;
 
-      const reindexStmt = stmt.ReindexStmt;
+      const reindexStmt = node(stmt.ReindexStmt);
 
       // Check if CONCURRENTLY is used
-      const params = (reindexStmt.params ?? []) as any[];
+      const params = nodes(reindexStmt.params) as unknown as DefElem[];
       const hasConcurrently = params.some(
-        (p: any) => p?.DefElem?.defname === "concurrently",
+        (p) => p?.DefElem?.defname === "concurrently",
       );
 
       if (hasConcurrently) continue;
@@ -47,15 +47,15 @@ export const SA019: Rule = {
       const kind = reindexStmt.kind as string;
       let target: string;
       if (kind === "REINDEX_OBJECT_INDEX") {
-        target = `index "${reindexStmt.relation?.relname ?? "unknown"}"`;
+        target = `index "${node(reindexStmt.relation).relname ?? "unknown"}"`;
       } else if (kind === "REINDEX_OBJECT_TABLE") {
-        target = `table "${reindexStmt.relation?.relname ?? "unknown"}"`;
+        target = `table "${node(reindexStmt.relation).relname ?? "unknown"}"`;
       } else if (kind === "REINDEX_OBJECT_SCHEMA") {
         target = `schema "${reindexStmt.name ?? "unknown"}"`;
       } else if (kind === "REINDEX_OBJECT_DATABASE") {
         target = `database "${reindexStmt.name ?? "unknown"}"`;
       } else {
-        target = reindexStmt.relation?.relname ?? "unknown";
+        target = String(node(reindexStmt.relation).relname ?? "unknown");
       }
 
       findings.push({

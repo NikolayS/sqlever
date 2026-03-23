@@ -27,7 +27,6 @@ import {
 import { PsqlRunner, type PsqlRunResult } from "../psql";
 import { ShutdownManager } from "../signals";
 import { info, error as logError, verbose } from "../output";
-import { isAutoCommit } from "./deploy";
 import { resolveTargetUri } from "./shared";
 
 // ---------------------------------------------------------------------------
@@ -395,10 +394,9 @@ export async function runRevert(
 
       verbose(`Reverting: ${change.name}`);
 
-      // Read revert script to check for auto-commit directive
-      let scriptContent: string;
+      // Read revert script to verify it exists
       try {
-        scriptContent = readFileSync(change.revertScriptPath, "utf-8");
+        readFileSync(change.revertScriptPath, "utf-8");
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logError(`Failed to read revert script for '${change.name}': ${msg}`);

@@ -11,8 +11,8 @@
  * Regular VACUUM (without FULL) is fine and does not trigger this rule.
  */
 
-import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import type { Rule, Finding, AnalysisContext, DefElem } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA014: Rule = {
   id: "SA014",
@@ -30,10 +30,10 @@ export const SA014: Rule = {
 
       // Check VACUUM FULL
       if (stmt?.VacuumStmt) {
-        const vacuumStmt = stmt.VacuumStmt;
-        const options = (vacuumStmt.options ?? []) as any[];
+        const vacuumStmt = node(stmt.VacuumStmt);
+        const options = nodes(vacuumStmt.options) as unknown as DefElem[];
         const hasFull = options.some(
-          (opt: any) => opt?.DefElem?.defname === "full",
+          (opt) => opt?.DefElem?.defname === "full",
         );
 
         if (hasFull) {
@@ -45,11 +45,12 @@ export const SA014: Rule = {
 
           // Extract table names from rels
           const tableNames: string[] = [];
-          for (const rel of (vacuumStmt.rels ?? []) as any[]) {
-            const rv = rel?.VacuumRelation?.relation;
-            if (rv?.relname) {
-              const schema = rv.schemaname ? `${rv.schemaname}.` : "";
-              tableNames.push(`${schema}${rv.relname}`);
+          for (const rel of nodes(vacuumStmt.rels)) {
+            const rv = node(node(rel).VacuumRelation).relation;
+            if (rv) {
+              const rvNode = node(rv);
+              const schema = rvNode.schemaname ? `${rvNode.schemaname}.` : "";
+              tableNames.push(`${schema}${rvNode.relname}`);
             }
           }
           const nameStr =
@@ -68,14 +69,14 @@ export const SA014: Rule = {
 
       // Check CLUSTER
       if (stmt?.ClusterStmt) {
-        const clusterStmt = stmt.ClusterStmt;
+        const clusterStmt = node(stmt.ClusterStmt);
         const location = offsetToLocation(
           rawSql,
           stmtEntry.stmt_location ?? 0,
           filePath,
         );
 
-        const tableName = clusterStmt.relation?.relname ?? "unknown";
+        const tableName = node(clusterStmt.relation).relname ?? "unknown";
 
         findings.push({
           ruleId: "SA014",

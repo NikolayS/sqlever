@@ -14,7 +14,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA008: Rule = {
   id: "SA008",
@@ -35,7 +35,7 @@ export const SA008: Rule = {
 
       if (!stmt?.TruncateStmt) continue;
 
-      const truncateStmt = stmt.TruncateStmt;
+      const truncateStmt = node(stmt.TruncateStmt);
 
       const location = offsetToLocation(
         rawSql,
@@ -45,8 +45,8 @@ export const SA008: Rule = {
 
       // Extract table names
       const tableNames: string[] = [];
-      for (const rel of truncateStmt.relations ?? []) {
-        const rv = rel.RangeVar;
+      for (const rel of nodes(truncateStmt.relations)) {
+        const rv = node(node(rel).RangeVar);
         if (rv?.relname) {
           const schema = rv.schemaname ? `${rv.schemaname}.` : "";
           tableNames.push(`${schema}${rv.relname}`);

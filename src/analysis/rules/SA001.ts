@@ -12,7 +12,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA001: Rule = {
   id: "SA001",
@@ -29,24 +29,24 @@ export const SA001: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.AlterTableStmt) continue;
 
-      const alterStmt = stmt.AlterTableStmt;
+      const alterStmt = node(stmt.AlterTableStmt);
       if (alterStmt.objtype !== "OBJECT_TABLE") continue;
 
-      const cmds = alterStmt.cmds ?? [];
-      for (const cmdEntry of cmds) {
-        const cmd = cmdEntry.AlterTableCmd;
-        if (!cmd || cmd.subtype !== "AT_AddColumn") continue;
+      for (const cmdEntry of nodes(alterStmt.cmds)) {
+        const cmd = node(cmdEntry.AlterTableCmd);
+        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AddColumn") continue;
 
-        const colDef = cmd.def?.ColumnDef;
+        const colDef = node(cmd.def).ColumnDef;
         if (!colDef) continue;
+        const colDefNode = node(colDef);
 
-        const constraints = colDef.constraints ?? [];
+        const constraints = nodes(colDefNode.constraints);
         let hasNotNull = false;
         let hasDefault = false;
 
         for (const c of constraints) {
-          const constraint = c.Constraint;
-          if (!constraint) continue;
+          const constraint = node(c.Constraint);
+          if (!c.Constraint) continue;
           if (constraint.contype === "CONSTR_NOTNULL") hasNotNull = true;
           if (constraint.contype === "CONSTR_DEFAULT") hasDefault = true;
         }
@@ -57,8 +57,8 @@ export const SA001: Rule = {
             stmtEntry.stmt_location ?? 0,
             filePath,
           );
-          const tableName = alterStmt.relation?.relname ?? "unknown";
-          const colName = colDef.colname ?? "unknown";
+          const tableName = node(alterStmt.relation).relname ?? "unknown";
+          const colName = colDefNode.colname ?? "unknown";
 
           findings.push({
             ruleId: "SA001",

@@ -17,7 +17,7 @@ import type { ParsedArgs } from "../cli";
 import { parsePlan, PlanParseError } from "../plan/parser";
 import type { Plan } from "../plan/types";
 import { loadConfig } from "../config/index";
-import { info, error as logError, verbose, json as jsonOut, getConfig } from "../output";
+import { info, verbose, json as jsonOut, getConfig } from "../output";
 
 // ---------------------------------------------------------------------------
 // Types

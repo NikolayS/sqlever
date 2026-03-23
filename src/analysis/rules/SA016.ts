@@ -14,7 +14,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA016: Rule = {
   id: "SA016",
@@ -31,16 +31,15 @@ export const SA016: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.AlterTableStmt) continue;
 
-      const alterStmt = stmt.AlterTableStmt;
+      const alterStmt = node(stmt.AlterTableStmt);
       if (alterStmt.objtype !== "OBJECT_TABLE") continue;
 
-      const cmds = alterStmt.cmds ?? [];
-      for (const cmdEntry of cmds) {
-        const cmd = cmdEntry.AlterTableCmd;
-        if (!cmd || cmd.subtype !== "AT_AddConstraint") continue;
+      for (const cmdEntry of nodes(alterStmt.cmds)) {
+        const cmd = node(cmdEntry.AlterTableCmd);
+        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AddConstraint") continue;
 
-        const constraint = cmd.def?.Constraint;
-        if (!constraint || constraint.contype !== "CONSTR_CHECK") continue;
+        const constraint = node(node(cmd.def).Constraint);
+        if (!node(cmd.def).Constraint || constraint.contype !== "CONSTR_CHECK") continue;
 
         // Check for NOT VALID: skip_validation = true means NOT VALID was used
         const hasNotValid = constraint.skip_validation === true;
@@ -52,7 +51,7 @@ export const SA016: Rule = {
             filePath,
           );
 
-          const tableName = alterStmt.relation?.relname ?? "unknown";
+          const tableName = node(alterStmt.relation).relname ?? "unknown";
           const constraintName = constraint.conname ?? "unnamed";
 
           findings.push({

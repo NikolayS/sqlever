@@ -18,8 +18,8 @@
  *   ALTER TABLE t VALIDATE CONSTRAINT fk;  -- takes ShareUpdateExclusiveLock only
  */
 
-import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import type { Rule, Finding, AnalysisContext, StringNode } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA009: Rule = {
   id: "SA009",
@@ -36,16 +36,15 @@ export const SA009: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.AlterTableStmt) continue;
 
-      const alterStmt = stmt.AlterTableStmt;
+      const alterStmt = node(stmt.AlterTableStmt);
       if (alterStmt.objtype !== "OBJECT_TABLE") continue;
 
-      const cmds = alterStmt.cmds ?? [];
-      for (const cmdEntry of cmds) {
-        const cmd = cmdEntry.AlterTableCmd;
-        if (!cmd || cmd.subtype !== "AT_AddConstraint") continue;
+      for (const cmdEntry of nodes(alterStmt.cmds)) {
+        const cmd = node(cmdEntry.AlterTableCmd);
+        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AddConstraint") continue;
 
-        const constraint = cmd.def?.Constraint;
-        if (!constraint || constraint.contype !== "CONSTR_FOREIGN") continue;
+        const constraint = node(node(cmd.def).Constraint);
+        if (!node(cmd.def).Constraint || constraint.contype !== "CONSTR_FOREIGN") continue;
 
         // Check for NOT VALID: in the AST, skip_validation = true means NOT VALID was used
         const hasNotValid = constraint.skip_validation === true;
@@ -57,13 +56,13 @@ export const SA009: Rule = {
             filePath,
           );
 
-          const tableName = alterStmt.relation?.relname ?? "unknown";
+          const tableName = node(alterStmt.relation).relname ?? "unknown";
           const constraintName = constraint.conname ?? "unnamed";
-          const refTable = constraint.pktable?.relname ?? "unknown";
+          const refTable = node(constraint.pktable).relname ?? "unknown";
 
           // Extract FK column names
-          const fkCols = (constraint.fk_attrs ?? [])
-            .map((attr: any) => attr?.String?.sval)
+          const fkCols = nodes(constraint.fk_attrs)
+            .map((attr) => (attr as unknown as StringNode)?.String?.sval)
             .filter(Boolean)
             .join(", ");
 

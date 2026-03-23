@@ -5,6 +5,93 @@
 // entry point, the rule registry, and individual rule implementations.
 
 // ---------------------------------------------------------------------------
+// libpg-query AST node types
+// ---------------------------------------------------------------------------
+
+/**
+ * Recursive AST node type for libpg-query output.
+ *
+ * Uses `Record<string, unknown>` at the type level. Rules access
+ * statement-specific fields via the `node()` helper which returns
+ * a permissive record type for deep property access.
+ */
+export type PgNode = Record<string, unknown>;
+
+/**
+ * Narrow an unknown AST value to a record for property access.
+ *
+ * Usage in rules: `const alterStmt = node(stmt.AlterTableStmt)`
+ * then access `alterStmt.objtype`, `alterStmt.cmds`, etc.
+ */
+export function node(value: unknown): Record<string, unknown> {
+  return (value ?? {}) as Record<string, unknown>;
+}
+
+/**
+ * Narrow an unknown AST value to an array of records.
+ *
+ * Usage in rules: `for (const cmd of nodes(alterStmt.cmds))`
+ */
+export function nodes(value: unknown): Record<string, unknown>[] {
+  return (value ?? []) as Record<string, unknown>[];
+}
+
+/**
+ * Extract a string leaf value from an AST node.
+ *
+ * Usage: `str(alterStmt.objtype)` returns the string value or "".
+ */
+export function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * A DefElem node from the libpg-query AST (used for options/params lists).
+ */
+export interface DefElem {
+  DefElem?: {
+    defname?: string;
+    arg?: PgNode;
+    defaction?: number;
+    location?: number;
+  };
+}
+
+/**
+ * A RangeVar node from the libpg-query AST.
+ */
+export interface RangeVar {
+  RangeVar?: {
+    relname?: string;
+    schemaname?: string;
+    inh?: boolean;
+    relpersistence?: string;
+    alias?: PgNode;
+    location?: number;
+  };
+}
+
+/**
+ * A String node from the libpg-query AST (name list elements, etc.).
+ */
+export interface StringNode {
+  String?: {
+    sval?: string;
+  };
+}
+
+/**
+ * A TypeName node from the libpg-query AST.
+ */
+export interface TypeName {
+  names?: StringNode[];
+  typmods?: PgNode[];
+  typemod?: number;
+  arrayBounds?: PgNode[];
+  location?: number;
+}
+
+// ---------------------------------------------------------------------------
 // Severity
 // ---------------------------------------------------------------------------
 
@@ -47,7 +134,7 @@ export interface ParseResult {
 
 /** A single statement entry from the parser. */
 export interface StmtEntry {
-  stmt: Record<string, unknown>;
+  stmt: PgNode;
   stmt_location?: number;
   stmt_len?: number;
 }
@@ -176,12 +263,9 @@ export function offsetToLocation(
  * Extract the type name string from a libpg-query TypeName node.
  * Returns the last name part (e.g. "varchar", "int4", "text").
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function extractTypeName(typeName: any): string | null {
+export function extractTypeName(typeName: TypeName | PgNode | undefined): string | null {
   if (!typeName?.names) return null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const names = typeName.names as any[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const names = typeName.names as StringNode[];
   const last = names[names.length - 1];
   return last?.String?.sval ?? null;
 }
@@ -189,31 +273,24 @@ export function extractTypeName(typeName: any): string | null {
 /**
  * Extract type modifiers (e.g. length for varchar, precision/scale for numeric).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function extractTypeMods(typeName: any): number[] {
+export function extractTypeMods(typeName: TypeName | PgNode | undefined): number[] {
   if (!typeName?.typmods) return [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (typeName.typmods as any[])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((m: any) => m?.A_Const?.ival?.ival)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((v: any): v is number => typeof v === "number");
+  return (typeName.typmods as PgNode[])
+    .map((m) => node(node(m).A_Const).ival)
+    .map((ival) => node(ival).ival)
+    .filter((v): v is number => typeof v === "number");
 }
 
 /**
  * Get the fully-qualified type name for display purposes.
  * Skips "pg_catalog" schema prefix.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function displayTypeName(typeName: any): string {
+export function displayTypeName(typeName: TypeName | PgNode | undefined): string {
   if (!typeName?.names) return "unknown";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const names = (typeName.names as any[])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((n: any) => n?.String?.sval)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((s: any): s is string => !!s)
-    .filter((s: string) => s !== "pg_catalog");
+  const names = (typeName.names as StringNode[])
+    .map((n) => n?.String?.sval)
+    .filter((s): s is string => !!s)
+    .filter((s) => s !== "pg_catalog");
   const base = names.join(".");
   const mods = extractTypeMods(typeName);
   if (mods.length > 0) {

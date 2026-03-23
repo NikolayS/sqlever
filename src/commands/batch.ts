@@ -13,7 +13,7 @@
 
 import type { ParsedArgs } from "../cli";
 import type { BatchJob } from "../batch/queue";
-import { info, json as jsonOut, table } from "../output";
+import { info, json as jsonOut } from "../output";
 
 // ---------------------------------------------------------------------------
 // Subcommand argument types

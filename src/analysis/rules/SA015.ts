@@ -11,7 +11,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node } from "../types.js";
 
 export const SA015: Rule = {
   id: "SA015",
@@ -28,7 +28,7 @@ export const SA015: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.RenameStmt) continue;
 
-      const renameStmt = stmt.RenameStmt;
+      const renameStmt = node(stmt.RenameStmt);
       const renameType = renameStmt.renameType;
 
       // Table rename: renameType === "OBJECT_TABLE"
@@ -39,7 +39,7 @@ export const SA015: Rule = {
           filePath,
         );
 
-        const oldName = renameStmt.relation?.relname ?? "unknown";
+        const oldName = node(renameStmt.relation).relname ?? "unknown";
         const newName = renameStmt.newname ?? "unknown";
 
         findings.push({
@@ -64,7 +64,7 @@ export const SA015: Rule = {
           filePath,
         );
 
-        const tableName = renameStmt.relation?.relname ?? "unknown";
+        const tableName = node(renameStmt.relation).relname ?? "unknown";
         const oldCol = renameStmt.subname ?? "unknown";
         const newCol = renameStmt.newname ?? "unknown";
 

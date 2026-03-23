@@ -44,7 +44,7 @@ export interface LogOptions {
  */
 export function parseLogArgs(
   rest: string[],
-  args: ParsedArgs,
+  _args: ParsedArgs,
 ): Omit<LogOptions, "dbUri" | "project"> {
   const opts: Omit<LogOptions, "dbUri" | "project"> = {};
 
@@ -233,7 +233,7 @@ function resolveProjectName(
 ): string {
   // Try to get from sqitch.conf entries
   for (const entry of config.sqitchConf.entries) {
-    if (entry.key.toLowerCase() === "core.project") {
+    if (entry.key.toLowerCase() === "core.project" && typeof entry.value === "string") {
       return entry.value;
     }
   }
