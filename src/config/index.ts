@@ -10,7 +10,7 @@
 //
 // The merged config is the single source of truth for all commands.
 
-import { existsSync, readFileSync } from "fs";
+import { readFileSync } from "fs";
 import { join, resolve } from "path";
 import { homedir } from "os";
 import {
@@ -291,7 +291,6 @@ function loadSqleverToml(projectDir: string): SqleverToml | null {
  */
 function readFileSafe(path: string): string | null {
   try {
-    if (!existsSync(path)) return null;
     return readFileSync(path, "utf-8");
   } catch {
     return null;

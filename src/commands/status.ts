@@ -16,8 +16,6 @@ import type { Change as RegistryChange } from "../db/registry";
 import { info, json as jsonOut } from "../output";
 import type { ParsedArgs } from "../cli";
 import { resolveTargetUri, withDatabase } from "./shared";
-// Re-exported from shared for backward compatibility (tests import from status).
-export { resolveTargetUri };
 
 // ---------------------------------------------------------------------------
 // Types

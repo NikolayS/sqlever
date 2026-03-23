@@ -320,12 +320,6 @@ export function isAutoCommit(scriptContent: string): boolean {
 }
 
 /**
- * @deprecated Use isAutoCommit() instead.
- * Kept as an alias for backward compatibility.
- */
-export const isNonTransactional = isAutoCommit;
-
-/**
  * Resolve the path to a deploy/verify script.
  */
 function scriptPath(

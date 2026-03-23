@@ -12,7 +12,7 @@
 //   - Release advisory lock, print summary
 
 import { resolve, join } from "node:path";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { ParsedArgs } from "../cli";
 import { loadConfig } from "../config/index";
 import { parsePlan } from "../plan/parser";
@@ -394,12 +394,9 @@ export async function runRevert(
 
       verbose(`Reverting: ${change.name}`);
 
-      // Read revert script to verify it exists
-      try {
-        readFileSync(change.revertScriptPath, "utf-8");
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logError(`Failed to read revert script for '${change.name}': ${msg}`);
+      // Verify revert script exists before executing
+      if (!existsSync(change.revertScriptPath)) {
+        logError(`Revert script not found for '${change.name}': ${change.revertScriptPath}`);
         const failInput = buildRevertInput(change.deployed, change.planChange);
         await safeRecordFail(registry, failInput, change.name);
         failCount++;

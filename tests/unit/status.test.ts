@@ -6,10 +6,10 @@ import { createHash } from "node:crypto";
 import {
   computeStatus,
   formatStatusText,
-  resolveTargetUri,
   parseStatusOptions,
   type StatusResult,
 } from "../../src/commands/status";
+import { resolveTargetUri } from "../../src/commands/shared";
 import type { Plan } from "../../src/plan/types";
 import type { Change as RegistryChange } from "../../src/db/registry";
 import type { MergedConfig } from "../../src/config/index";

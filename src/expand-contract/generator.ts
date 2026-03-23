@@ -26,7 +26,7 @@ import {
   type AddOptions,
 } from "../commands/add";
 import type { MergedConfig } from "../config/index";
-import { info, error, verbose } from "../output";
+import { info, verbose } from "../output";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -767,10 +767,5 @@ export async function runExpandAdd(
   const { loadConfig } = await import("../config/index");
   const cfg = config ?? loadConfig(opts.topDir, undefined, environment);
 
-  try {
-    await generateExpandContract(opts, cfg, environment);
-  } catch (err) {
-    error(`Error: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
-  }
+  await generateExpandContract(opts, cfg, environment);
 }

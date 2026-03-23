@@ -83,7 +83,6 @@ const {
   runDeploy,
   projectLockKey,
   isAutoCommit,
-  isNonTransactional,
   parseDeployOptions,
   ADVISORY_LOCK_NAMESPACE,
   EXIT_CONCURRENT_DEPLOY,
