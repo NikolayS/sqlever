@@ -13,7 +13,7 @@
 // When the git history is unavailable (no repo, file never committed),
 // falls back to HEAD (current working tree).
 
-import { execSync, type ExecSyncOptions } from "node:child_process";
+import { execFileSync, type ExecSyncOptions } from "node:child_process";
 import { dirname, join, resolve, normalize } from "node:path";
 import { readFileSync, existsSync } from "node:fs";
 
@@ -166,6 +166,10 @@ export function findIncludes(content: string): IncludeDirective[] {
 /**
  * Execute a git command synchronously and return stdout.
  * Returns undefined on any error (not a git repo, file doesn't exist, etc.).
+ *
+ * Uses execFileSync (not execSync) to avoid shell interpretation of
+ * arguments. This prevents command injection via crafted file paths,
+ * commit hashes, or timestamps that might contain shell metacharacters.
  */
 function gitExec(
   args: string[],
@@ -178,7 +182,7 @@ function gitExec(
       timeout: 10_000,
       maxBuffer: 10 * 1024 * 1024, // 10 MB — generous for large SQL files
     };
-    const result = execSync(`git ${args.join(" ")}`, opts);
+    const result = execFileSync("git", args, opts);
     return result.toString();
   } catch {
     return undefined;

@@ -222,6 +222,21 @@ export function runShow(
     process.exit(1);
   }
 
+  // Validate name format for script types to prevent path traversal.
+  // Change names used in file paths must not contain path separators.
+  // Tag names and change metadata lookups are safe (string comparison only).
+  if (
+    (opts.type === "deploy" || opts.type === "revert" || opts.type === "verify") &&
+    !/^[a-zA-Z_][a-zA-Z0-9_@.-]*$/.test(opts.name)
+  ) {
+    error(
+      `Error: invalid change name '${opts.name}'. ` +
+      "Names must start with a letter or underscore and contain only " +
+      "letters, digits, underscores, hyphens, dots, and @.",
+    );
+    process.exit(1);
+  }
+
   // Load config if not provided
   const cfg = config ?? loadConfig(opts.topDir, undefined, undefined);
   const topDir = resolve(opts.topDir ?? cfg.core.top_dir);
