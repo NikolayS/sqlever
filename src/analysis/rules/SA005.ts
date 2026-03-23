@@ -8,8 +8,9 @@
  * Without CONCURRENTLY, DROP INDEX takes an AccessExclusiveLock on the table.
  */
 
-import type { Rule, Finding, AnalysisContext, StringNode } from "../types.js";
-import { offsetToLocation, node, nodes } from "../types.js";
+import type { Rule, Finding, AnalysisContext } from "../types.js";
+import { offsetToLocation, node } from "../types.js";
+import { extractDropObjectNames } from "../ast-helpers.js";
 
 export const SA005: Rule = {
   id: "SA005",
@@ -40,18 +41,7 @@ export const SA005: Rule = {
         filePath,
       );
 
-      // Extract index name(s) from the objects list
-      const indexNames: string[] = [];
-      for (const obj of nodes(dropStmt.objects)) {
-        const list = node(obj).List;
-        if (list) {
-          const names = nodes(node(list).items)
-            .map((item) => (item as unknown as StringNode)?.String?.sval)
-            .filter(Boolean);
-          indexNames.push(names.join("."));
-        }
-      }
-
+      const indexNames = extractDropObjectNames(dropStmt);
       const nameStr = indexNames.length > 0 ? indexNames.join(", ") : "unnamed";
 
       findings.push({

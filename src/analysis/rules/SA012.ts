@@ -29,7 +29,7 @@ export const SA012: Rule = {
       if (!stmt?.AlterSeqStmt) continue;
 
       const alterSeq = node(stmt.AlterSeqStmt);
-      const options = nodes(alterSeq.options) as unknown as DefElem[];
+      const options = nodes<DefElem>(alterSeq.options);
 
       // Check if any option is "restart"
       const hasRestart = options.some(

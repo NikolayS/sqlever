@@ -74,7 +74,7 @@ function isRiskyDDL(stmt: Record<string, unknown>): { risky: boolean; descriptio
 
   // VACUUM FULL (AccessExclusiveLock)
   if (stmt?.VacuumStmt) {
-    const options = nodes(node(stmt.VacuumStmt).options) as unknown as DefElem[];
+    const options = nodes<DefElem>(node(stmt.VacuumStmt).options);
     const hasFull = options.some(
       (opt) => opt?.DefElem?.defname === "full",
     );
@@ -85,7 +85,7 @@ function isRiskyDDL(stmt: Record<string, unknown>): { risky: boolean; descriptio
 
   // REINDEX without CONCURRENTLY (AccessExclusiveLock)
   if (stmt?.ReindexStmt) {
-    const params = nodes(node(stmt.ReindexStmt).params) as unknown as DefElem[];
+    const params = nodes<DefElem>(node(stmt.ReindexStmt).params);
     const hasConcurrently = params.some(
       (p) => p?.DefElem?.defname === "concurrently",
     );

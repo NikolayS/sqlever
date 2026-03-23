@@ -30,7 +30,7 @@ export const SA019: Rule = {
       const reindexStmt = node(stmt.ReindexStmt);
 
       // Check if CONCURRENTLY is used
-      const params = nodes(reindexStmt.params) as unknown as DefElem[];
+      const params = nodes<DefElem>(reindexStmt.params);
       const hasConcurrently = params.some(
         (p) => p?.DefElem?.defname === "concurrently",
       );

@@ -9,7 +9,7 @@
  * known to be binary-compatible (no rewrite needed).
  *
  * When a USING clause is present, SA003 ALWAYS fires regardless of the safe
- * cast allowlist — PostgreSQL rewrites the table to evaluate the expression.
+ * cast allowlist -- PostgreSQL rewrites the table to evaluate the expression.
  *
  * Safe cast allowlist:
  * - varchar(N) to varchar(M) where M > N (widening)
@@ -21,13 +21,14 @@
  */
 
 import type { Rule, Finding, AnalysisContext, TypeName } from "../types.js";
-import { offsetToLocation, displayTypeName, node, nodes } from "../types.js";
+import { offsetToLocation, displayTypeName, node } from "../types.js";
+import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 /**
  * Check if a type change is in the safe cast allowlist.
  * Returns true if the cast is safe (no table rewrite).
  *
- * Note: This function does NOT know the source type from the AST alone —
+ * Note: This function does NOT know the source type from the AST alone --
  * ALTER COLUMN TYPE only specifies the target type. We check if the target
  * type is in a family known to have safe widening casts. Without a DB
  * connection, we can only check the target type; the actual safety depends
@@ -54,65 +55,46 @@ export const SA003: Rule = {
     const findings: Finding[] = [];
     const { ast, rawSql, filePath } = context;
 
-    if (!ast?.stmts) return findings;
+    forEachAlterTableCmd(ast, ({ cmd, alterStmt, stmtLocation }) => {
+      if (cmd.subtype !== "AT_AlterColumnType") return;
 
-    for (const stmtEntry of ast.stmts) {
-      const stmt = stmtEntry.stmt;
-      if (!stmt?.AlterTableStmt) continue;
+      const colDef = node(cmd.def).ColumnDef;
+      if (!colDef) return;
+      const colDefNode = node(colDef);
 
-      const alterStmt = node(stmt.AlterTableStmt);
-      if (alterStmt.objtype !== "OBJECT_TABLE") continue;
+      const hasUsing = !!colDefNode.raw_default;
+      const targetType = colDefNode.typeName;
+      const targetTypeDisplay = displayTypeName(targetType as TypeName | undefined);
+      const colName = cmd.name ?? "unknown";
+      const tableName = node(alterStmt.relation).relname ?? "unknown";
 
-      for (const cmdEntry of nodes(alterStmt.cmds)) {
-        const cmd = node(cmdEntry.AlterTableCmd);
-        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AlterColumnType") continue;
-
-        const colDef = node(cmd.def).ColumnDef;
-        if (!colDef) continue;
-        const colDefNode = node(colDef);
-
-        const hasUsing = !!colDefNode.raw_default;
-        const targetType = colDefNode.typeName;
-        const targetTypeDisplay = displayTypeName(targetType as TypeName | undefined);
-        const colName = cmd.name ?? "unknown";
-        const tableName = node(alterStmt.relation).relname ?? "unknown";
-
-        // USING clause always triggers — PG rewrites to evaluate the expression
-        if (hasUsing) {
-          const location = offsetToLocation(
-            rawSql,
-            stmtEntry.stmt_location ?? 0,
-            filePath,
-          );
-          findings.push({
-            ruleId: "SA003",
-            severity: "error",
-            message: `Changing type of column "${colName}" on table "${tableName}" to ${targetTypeDisplay} with USING clause causes a full table rewrite with AccessExclusiveLock.`,
-            location,
-            suggestion:
-              "Consider the expand/contract pattern: add a new column, backfill in batches, then swap.",
-          });
-          continue;
-        }
-
-        // Check safe cast allowlist (static mode: conservative)
-        if (!isSafeCast(targetType as TypeName | undefined)) {
-          const location = offsetToLocation(
-            rawSql,
-            stmtEntry.stmt_location ?? 0,
-            filePath,
-          );
-          findings.push({
-            ruleId: "SA003",
-            severity: "error",
-            message: `Changing type of column "${colName}" on table "${tableName}" to ${targetTypeDisplay} may cause a full table rewrite with AccessExclusiveLock.`,
-            location,
-            suggestion:
-              "Consider the expand/contract pattern: add a new column with the new type, backfill in batches, then swap. Safe casts (varchar widening, numeric precision widening) can be suppressed with -- sqlever:disable SA003.",
-          });
-        }
+      // USING clause always triggers -- PG rewrites to evaluate the expression
+      if (hasUsing) {
+        const location = offsetToLocation(rawSql, stmtLocation, filePath);
+        findings.push({
+          ruleId: "SA003",
+          severity: "error",
+          message: `Changing type of column "${colName}" on table "${tableName}" to ${targetTypeDisplay} with USING clause causes a full table rewrite with AccessExclusiveLock.`,
+          location,
+          suggestion:
+            "Consider the expand/contract pattern: add a new column, backfill in batches, then swap.",
+        });
+        return;
       }
-    }
+
+      // Check safe cast allowlist (static mode: conservative)
+      if (!isSafeCast(targetType as TypeName | undefined)) {
+        const location = offsetToLocation(rawSql, stmtLocation, filePath);
+        findings.push({
+          ruleId: "SA003",
+          severity: "error",
+          message: `Changing type of column "${colName}" on table "${tableName}" to ${targetTypeDisplay} may cause a full table rewrite with AccessExclusiveLock.`,
+          location,
+          suggestion:
+            "Consider the expand/contract pattern: add a new column with the new type, backfill in batches, then swap. Safe casts (varchar widening, numeric precision widening) can be suppressed with -- sqlever:disable SA003.",
+        });
+      }
+    });
 
     return findings;
   },

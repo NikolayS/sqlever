@@ -11,7 +11,8 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation, node, nodes } from "../types.js";
+import { offsetToLocation, node } from "../types.js";
+import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA006: Rule = {
   id: "SA006",
@@ -22,38 +23,22 @@ export const SA006: Rule = {
     const findings: Finding[] = [];
     const { ast, rawSql, filePath } = context;
 
-    if (!ast?.stmts) return findings;
+    forEachAlterTableCmd(ast, ({ cmd, alterStmt, stmtLocation }) => {
+      if (cmd.subtype !== "AT_DropColumn") return;
 
-    for (const stmtEntry of ast.stmts) {
-      const stmt = stmtEntry.stmt;
-      if (!stmt?.AlterTableStmt) continue;
+      const location = offsetToLocation(rawSql, stmtLocation, filePath);
+      const tableName = node(alterStmt.relation).relname ?? "unknown";
+      const colName = cmd.name ?? "unknown";
 
-      const alterStmt = node(stmt.AlterTableStmt);
-      if (alterStmt.objtype !== "OBJECT_TABLE") continue;
-
-      for (const cmdEntry of nodes(alterStmt.cmds)) {
-        const cmd = node(cmdEntry.AlterTableCmd);
-        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_DropColumn") continue;
-
-        const location = offsetToLocation(
-          rawSql,
-          stmtEntry.stmt_location ?? 0,
-          filePath,
-        );
-
-        const tableName = node(alterStmt.relation).relname ?? "unknown";
-        const colName = cmd.name ?? "unknown";
-
-        findings.push({
-          ruleId: "SA006",
-          severity: "warn",
-          message: `Dropping column "${colName}" from table "${tableName}" causes irreversible data loss.`,
-          location,
-          suggestion:
-            "Ensure a backup exists and that no application code depends on this column. Consider a deprecation period before dropping.",
-        });
-      }
-    }
+      findings.push({
+        ruleId: "SA006",
+        severity: "warn",
+        message: `Dropping column "${colName}" from table "${tableName}" causes irreversible data loss.`,
+        location,
+        suggestion:
+          "Ensure a backup exists and that no application code depends on this column. Consider a deprecation period before dropping.",
+      });
+    });
 
     return findings;
   },

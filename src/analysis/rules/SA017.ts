@@ -20,7 +20,8 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation, node, nodes } from "../types.js";
+import { offsetToLocation, node } from "../types.js";
+import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA017: Rule = {
   id: "SA017",
@@ -31,42 +32,27 @@ export const SA017: Rule = {
     const findings: Finding[] = [];
     const { ast, rawSql, filePath } = context;
 
-    if (!ast?.stmts) return findings;
+    forEachAlterTableCmd(ast, ({ cmd, alterStmt, stmtLocation }) => {
+      if (cmd.subtype !== "AT_SetNotNull") return;
 
-    for (const stmtEntry of ast.stmts) {
-      const stmt = stmtEntry.stmt;
-      if (!stmt?.AlterTableStmt) continue;
+      const colName = cmd.name ?? "unknown";
+      const tableName = node(alterStmt.relation).relname ?? "unknown";
 
-      const alterStmt = node(stmt.AlterTableStmt);
-      if (alterStmt.objtype !== "OBJECT_TABLE") continue;
+      // Connected check: if DB is available, check for existing
+      // CHECK (col IS NOT NULL) constraint and suppress if found
+      // This is left as a stub for the analysis engine integration
 
-      for (const cmdEntry of nodes(alterStmt.cmds)) {
-        const cmd = node(cmdEntry.AlterTableCmd);
-        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_SetNotNull") continue;
+      const location = offsetToLocation(rawSql, stmtLocation, filePath);
 
-        const colName = cmd.name ?? "unknown";
-        const tableName = node(alterStmt.relation).relname ?? "unknown";
-
-        // Connected check: if DB is available, check for existing
-        // CHECK (col IS NOT NULL) constraint and suppress if found
-        // This is left as a stub for the analysis engine integration
-
-        const location = offsetToLocation(
-          rawSql,
-          stmtEntry.stmt_location ?? 0,
-          filePath,
-        );
-
-        findings.push({
-          ruleId: "SA017",
-          severity: "warn",
-          message: `SET NOT NULL on column "${colName}" of table "${tableName}" requires a full table scan on PG < 12, or a valid CHECK (${colName} IS NOT NULL) constraint on PG 12+.`,
-          location,
-          suggestion:
-            "Use the three-step pattern: (1) ADD CONSTRAINT ... CHECK (col IS NOT NULL) NOT VALID, (2) VALIDATE CONSTRAINT, (3) SET NOT NULL.",
-        });
-      }
-    }
+      findings.push({
+        ruleId: "SA017",
+        severity: "warn",
+        message: `SET NOT NULL on column "${colName}" of table "${tableName}" requires a full table scan on PG < 12, or a valid CHECK (${colName} IS NOT NULL) constraint on PG 12+.`,
+        location,
+        suggestion:
+          "Use the three-step pattern: (1) ADD CONSTRAINT ... CHECK (col IS NOT NULL) NOT VALID, (2) VALIDATE CONSTRAINT, (3) SET NOT NULL.",
+      });
+    });
 
     return findings;
   },

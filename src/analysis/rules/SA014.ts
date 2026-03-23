@@ -31,7 +31,7 @@ export const SA014: Rule = {
       // Check VACUUM FULL
       if (stmt?.VacuumStmt) {
         const vacuumStmt = node(stmt.VacuumStmt);
-        const options = nodes(vacuumStmt.options) as unknown as DefElem[];
+        const options = nodes<DefElem>(vacuumStmt.options);
         const hasFull = options.some(
           (opt) => opt?.DefElem?.defname === "full",
         );
