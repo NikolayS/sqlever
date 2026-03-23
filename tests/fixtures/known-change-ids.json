@@ -206,5 +206,53 @@
       "note": ""
     },
     "expected_id": "c4654d467e7dda87dfa38849527a57603656123f"
+  },
+
+  "planner_trailing_space": {
+    "_comment": "Bug 8 regression: planner name with trailing space",
+    "input": {
+      "project": "compat",
+      "change": "trailing_space_planner",
+      "parent": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "User ",
+      "planner_email": "user@example.com",
+      "planned_at": "2024-07-04T00:09:00Z",
+      "requires": [],
+      "conflicts": [],
+      "note": ""
+    },
+    "expected_id": "6f645fb133f61590e01aa1b81f236121dba46f7d"
+  },
+
+  "note_with_newline": {
+    "_comment": "Bug 9 regression: note containing literal newline character",
+    "input": {
+      "project": "compat",
+      "change": "note_with_newline",
+      "parent": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": "Ada Lovelace",
+      "planner_email": "ada@example.com",
+      "planned_at": "2024-07-04T00:10:00Z",
+      "requires": [],
+      "conflicts": [],
+      "note": "Line one\nLine two"
+    },
+    "expected_id": "6b8f41ba73711a2b7df06d7c6bc228f03434f131"
+  },
+
+  "whitespace_only_planner": {
+    "_comment": "Bug 10 regression: planner name is whitespace only",
+    "input": {
+      "project": "compat",
+      "change": "whitespace_planner",
+      "parent": "f5abb43c365b611ccf0968e3e0f250c567197941",
+      "planner_name": " ",
+      "planner_email": "space@example.com",
+      "planned_at": "2024-07-04T00:11:00Z",
+      "requires": [],
+      "conflicts": [],
+      "note": ""
+    },
+    "expected_id": "80bcda5432fc1bce038badd68ea41c8064e5281a"
   }
 }

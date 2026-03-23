@@ -891,7 +891,7 @@ export async function executeDeploy(
  * keeps `<name>.sql`. This function inspects the plan for duplicate
  * change names and resolves the correct script name for each version.
  */
-function buildScriptNameMap(plan: Plan): Map<string, string> {
+export function buildScriptNameMap(plan: Plan): Map<string, string> {
   const map = new Map<string, string>();
 
   // Group change indices by name to detect reworks

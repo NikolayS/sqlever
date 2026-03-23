@@ -1,4 +1,7 @@
 import { describe, it, expect } from "bun:test";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { loadConfig, mergeConfs } from "../../src/config/index";
 import {
   parseSqitchConf,
@@ -283,5 +286,54 @@ describe("mergeConfs", () => {
 
     const allTags = confGetAll(merged, "deploy.tag");
     expect(allTags).toEqual(["v4", "v5"]); // v1, v2, v3 are gone
+  });
+});
+
+// ---------------------------------------------------------------------------
+// top_dir applied to default paths
+// ---------------------------------------------------------------------------
+
+describe("top_dir applied to default paths", () => {
+  it("top_dir is applied to default plan_file path", () => {
+    // Create a temporary project directory with a sqitch.conf that sets
+    // top_dir but does NOT set plan_file, deploy_dir, etc.
+    const dir = join(tmpdir(), `sqlever-top-dir-test-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "sqitch.conf"),
+      "[core]\n\tengine = pg\n\ttop_dir = ./db\n",
+      "utf-8",
+    );
+
+    try {
+      const config = loadConfig(dir, {}, {});
+      // When top_dir=./db and no explicit plan_file, the default plan_file
+      // should be resolved relative to top_dir: ./db/sqitch.plan
+      expect(config.core.plan_file).toBe("db/sqitch.plan");
+      // Similarly, deploy_dir should be under top_dir
+      expect(config.core.deploy_dir).toBe("db/deploy");
+      expect(config.core.revert_dir).toBe("db/revert");
+      expect(config.core.verify_dir).toBe("db/verify");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("explicit plan_file overrides top_dir-based default", () => {
+    const dir = join(tmpdir(), `sqlever-top-dir-override-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "sqitch.conf"),
+      "[core]\n\tengine = pg\n\ttop_dir = ./db\n\tplan_file = custom.plan\n",
+      "utf-8",
+    );
+
+    try {
+      const config = loadConfig(dir, {}, {});
+      // Explicit plan_file should NOT have top_dir prepended
+      expect(config.core.plan_file).toBe("custom.plan");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -415,6 +415,27 @@ describe("change ID computation against known-change-ids.json", () => {
     const idWithoutNote = computeChangeId(inputWithoutNote as ChangeIdInput);
     expect(idWithoutNote).toBe(idWithEmptyNote);
   });
+
+  // 15. Planner name with trailing space (Bug 8 regression guard)
+  it("15: planner name with trailing space matches expected SHA-1", () => {
+    const entry = getEntry("planner_trailing_space");
+    const id = computeChangeId(entry.input as ChangeIdInput);
+    expect(id).toBe(entry.expected_id);
+  });
+
+  // 16. Note containing newline (Bug 9 regression guard)
+  it("16: note with embedded newline matches expected SHA-1", () => {
+    const entry = getEntry("note_with_newline");
+    const id = computeChangeId(entry.input as ChangeIdInput);
+    expect(id).toBe(entry.expected_id);
+  });
+
+  // 17. Whitespace-only planner name (Bug 10 regression guard)
+  it("17: whitespace-only planner name matches expected SHA-1", () => {
+    const entry = getEntry("whitespace_only_planner");
+    const id = computeChangeId(entry.input as ChangeIdInput);
+    expect(id).toBe(entry.expected_id);
+  });
 });
 
 // =========================================================================
