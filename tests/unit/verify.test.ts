@@ -45,9 +45,9 @@ const {
   getVerifyScriptPath,
   runVerifyScript,
   formatVerifyResult,
-  resolveTargetUri,
   EXIT_CODE_VERIFY_FAILED,
 } = await import("../../src/commands/verify");
+const { resolveTargetUri } = await import("../../src/commands/shared");
 const { parseArgs } = await import("../../src/cli");
 
 // We also need PsqlRunner for mocking
@@ -544,27 +544,28 @@ describe("verify command", () => {
   describe("resolveTargetUri()", () => {
     it("returns --db-uri when provided", () => {
       const uri = resolveTargetUri(
-        { dbUri: "postgresql://host/db", topDir: "." },
         { targets: {}, engines: {} } as never,
+        "postgresql://host/db",
       );
       expect(uri).toBe("postgresql://host/db");
     });
 
     it("looks up named target from config", () => {
       const uri = resolveTargetUri(
-        { target: "prod", topDir: "." },
         {
           targets: { prod: { name: "prod", uri: "postgresql://prod/db" } },
           engines: {},
         } as never,
+        undefined,
+        "prod",
       );
       expect(uri).toBe("postgresql://prod/db");
     });
 
     it("falls back to engine target string", () => {
       const uri = resolveTargetUri(
-        { topDir: "." },
         {
+          core: { engine: "pg" },
           targets: {},
           engines: { pg: { name: "pg", target: "db:pg://local/mydb" } },
         } as never,
@@ -572,12 +573,11 @@ describe("verify command", () => {
       expect(uri).toBe("db:pg://local/mydb");
     });
 
-    it("returns undefined when no target configured", () => {
+    it("returns null when no target configured", () => {
       const uri = resolveTargetUri(
-        { topDir: "." },
-        { targets: {}, engines: {} } as never,
+        { core: { engine: undefined }, targets: {}, engines: {} } as never,
       );
-      expect(uri).toBeUndefined();
+      expect(uri).toBeNull();
     });
   });
 

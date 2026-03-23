@@ -4,10 +4,10 @@
 // event type, pagination (limit/offset), ordering, and JSON output.
 
 import { Registry, type Event } from "../db/registry";
-import { DatabaseClient } from "../db/client";
 import { info, error, json, table, verbose, getConfig } from "../output";
 import type { ParsedArgs } from "../cli";
 import { loadConfig } from "../config/index";
+import { resolveTargetUri, withDatabase } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -173,14 +173,8 @@ export async function runLog(
 ): Promise<void> {
   verbose(`Connecting to database for log...`);
 
-  const client = new DatabaseClient(opts.dbUri, {
-    command: "log",
-    project: opts.project,
-  });
-
-  try {
-    await client.connect();
-    const registry = new Registry(client);
+  await withDatabase(opts.dbUri, { command: "log", project: opts.project }, async (db) => {
+    const registry = new Registry(db);
 
     const events = await registry.getEvents(opts.project, {
       event: opts.event,
@@ -197,9 +191,7 @@ export async function runLog(
     } else {
       formatEventsText(events);
     }
-  } finally {
-    await client.disconnect();
-  }
+  });
 }
 
 /**
@@ -212,8 +204,7 @@ export async function runLogCommand(args: ParsedArgs): Promise<void> {
   // Resolve database URI from args or config
   const config = loadConfig(args.topDir);
 
-  const dbUri = args.dbUri
-    ?? resolveTargetUri(config, args.target)
+  const dbUri = resolveTargetUri(config, args.dbUri, args.target)
     ?? undefined;
 
   if (!dbUri) {
@@ -234,39 +225,6 @@ export async function runLogCommand(args: ParsedArgs): Promise<void> {
 // ---------------------------------------------------------------------------
 // Config resolution helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Resolve a target URI from the merged config.
- */
-function resolveTargetUri(
-  config: ReturnType<typeof loadConfig>,
-  targetName?: string,
-): string | null {
-  if (targetName && config.targets[targetName]) {
-    return config.targets[targetName]!.uri ?? null;
-  }
-
-  // Try the engine's default target
-  const engineName = config.core.engine;
-  if (engineName && config.engines[engineName]) {
-    const engineTarget = config.engines[engineName]!.target;
-    if (engineTarget && config.targets[engineTarget]) {
-      return config.targets[engineTarget]!.uri ?? null;
-    }
-    // The engine target might be a URI itself
-    if (engineTarget && engineTarget.includes("://")) {
-      return engineTarget;
-    }
-  }
-
-  // Try the first available target
-  const targetNames = Object.keys(config.targets);
-  if (targetNames.length > 0) {
-    return config.targets[targetNames[0]!]!.uri ?? null;
-  }
-
-  return null;
-}
 
 /**
  * Resolve project name from sqitch.conf or fallback to directory name.

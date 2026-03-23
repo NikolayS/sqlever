@@ -13,16 +13,16 @@
 import { resolve, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import type { ParsedArgs } from "../cli";
-import { loadConfig, type MergedConfig } from "../config/index";
+import { loadConfig } from "../config/index";
 import { parsePlan } from "../plan/parser";
 import type { Plan } from "../plan/types";
-import { DatabaseClient } from "../db/client";
 import {
   Registry,
   type Change as RegistryChange,
 } from "../db/registry";
 import { PsqlRunner, type PsqlRunResult } from "../psql";
 import { info, error as logError, verbose } from "../output";
+import { resolveTargetUri, withDatabase } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Exit codes (SPEC R6)
@@ -87,34 +87,6 @@ export function parseVerifyOptions(args: ParsedArgs): VerifyOptions {
   }
 
   return opts;
-}
-
-// ---------------------------------------------------------------------------
-// Resolve target URI from config and options
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the database connection URI from the combined config sources.
- *
- * Precedence: --db-uri > target lookup > engine default target.
- */
-export function resolveTargetUri(
-  opts: VerifyOptions,
-  config: MergedConfig,
-): string | undefined {
-  // CLI --db-uri takes precedence
-  if (opts.dbUri) return opts.dbUri;
-
-  // Named target lookup
-  const targetName = opts.target ?? config.engines.pg?.target;
-  if (targetName && config.targets[targetName]) {
-    return config.targets[targetName]!.uri;
-  }
-
-  // Fall back to engine target (which may be a URI like db:pg://...)
-  if (targetName) return targetName;
-
-  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +319,7 @@ export async function runVerify(
   }
 
   // Resolve target URI
-  const targetUri = resolveTargetUri(options, config);
+  const targetUri = resolveTargetUri(config, options.dbUri, options.target);
   if (!targetUri) {
     logError(
       "No database target specified. Use --db-uri or configure a target in sqitch.conf.",
@@ -355,83 +327,78 @@ export async function runVerify(
     process.exit(1);
   }
 
-  // 2. Connect to database
-  const db = new DatabaseClient(targetUri, {
-    command: "verify",
-    project: plan.project.name,
-  });
+  // 2. Connect to database, run verification, disconnect
+  await withDatabase(
+    targetUri,
+    { command: "verify", project: plan.project.name },
+    async (db) => {
+      const registry = new Registry(db);
 
-  await db.connect();
+      // 3. Read deployed changes
+      const deployedChanges = await registry.getDeployedChanges(plan.project.name);
 
-  try {
-    const registry = new Registry(db);
+      if (deployedChanges.length === 0) {
+        info("Nothing to verify. No changes are deployed.");
+        return;
+      }
 
-    // 3. Read deployed changes
-    const deployedChanges = await registry.getDeployedChanges(plan.project.name);
+      // 4. Filter to --from/--to range
+      let changesToVerify: RegistryChange[];
+      try {
+        changesToVerify = filterChangesForRange(
+          deployedChanges,
+          options.fromChange,
+          options.toChange,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logError(msg);
+        process.exit(1);
+      }
 
-    if (deployedChanges.length === 0) {
-      info("Nothing to verify. No changes are deployed.");
-      return;
-    }
+      if (changesToVerify.length === 0) {
+        info("Nothing to verify in the specified range.");
+        return;
+      }
 
-    // 4. Filter to --from/--to range
-    let changesToVerify: RegistryChange[];
-    try {
-      changesToVerify = filterChangesForRange(
-        deployedChanges,
-        options.fromChange,
-        options.toChange,
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logError(msg);
-      process.exit(1);
-    }
+      // 5. Execute verify scripts
+      const psqlRunner = opts?.psqlRunner ?? new PsqlRunner();
+      const verifyDir = join(topDir, config.core.verify_dir);
 
-    if (changesToVerify.length === 0) {
-      info("Nothing to verify in the specified range.");
-      return;
-    }
+      const results: VerifyChangeResult[] = [];
 
-    // 5. Execute verify scripts
-    const psqlRunner = opts?.psqlRunner ?? new PsqlRunner();
-    const verifyDir = join(topDir, config.core.verify_dir);
+      for (const deployed of changesToVerify) {
+        const scriptPath = getVerifyScriptPath(verifyDir, deployed.change);
 
-    const results: VerifyChangeResult[] = [];
+        verbose(`Verifying: ${deployed.change}`);
 
-    for (const deployed of changesToVerify) {
-      const scriptPath = getVerifyScriptPath(verifyDir, deployed.change);
+        const changeResult = await runVerifyScript(
+          psqlRunner,
+          scriptPath,
+          targetUri,
+          topDir,
+          deployed.change,
+          deployed.change_id,
+        );
 
-      verbose(`Verifying: ${deployed.change}`);
+        results.push(changeResult);
+      }
 
-      const changeResult = await runVerifyScript(
-        psqlRunner,
-        scriptPath,
-        targetUri,
-        topDir,
-        deployed.change,
-        deployed.change_id,
-      );
+      // 6. Build summary and report
+      const verifyResult: VerifyResult = {
+        changes: results,
+        total: results.length,
+        passed: results.filter((r) => r.pass && !r.skipped).length,
+        failed: results.filter((r) => !r.pass).length,
+        skipped: results.filter((r) => r.skipped).length,
+      };
 
-      results.push(changeResult);
-    }
+      info(formatVerifyResult(verifyResult));
 
-    // 6. Build summary and report
-    const verifyResult: VerifyResult = {
-      changes: results,
-      total: results.length,
-      passed: results.filter((r) => r.pass && !r.skipped).length,
-      failed: results.filter((r) => !r.pass).length,
-      skipped: results.filter((r) => r.skipped).length,
-    };
-
-    info(formatVerifyResult(verifyResult));
-
-    // 7. Exit code 3 if any failures (SPEC R6)
-    if (verifyResult.failed > 0) {
-      process.exit(EXIT_CODE_VERIFY_FAILED);
-    }
-  } finally {
-    await db.disconnect();
-  }
+      // 7. Exit code 3 if any failures (SPEC R6)
+      if (verifyResult.failed > 0) {
+        process.exit(EXIT_CODE_VERIFY_FAILED);
+      }
+    },
+  );
 }
