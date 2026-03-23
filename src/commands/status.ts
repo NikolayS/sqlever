@@ -9,12 +9,15 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { loadConfig, type MergedConfig } from "../config/index";
+import { loadConfig } from "../config/index";
 import { parsePlan } from "../plan/parser";
 import { computeScriptHash, type Plan } from "../plan/types";
 import type { Change as RegistryChange } from "../db/registry";
 import { info, error, json as jsonOut } from "../output";
 import type { ParsedArgs } from "../cli";
+import { resolveTargetUri, withDatabase } from "./shared";
+// Re-exported from shared for backward compatibility (tests import from status).
+export { resolveTargetUri };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -104,47 +107,6 @@ export function parseStatusOptions(args: ParsedArgs): StatusOptions {
 // ---------------------------------------------------------------------------
 // Core logic (pure, testable)
 // ---------------------------------------------------------------------------
-
-/**
- * Resolve the target URI string from config and CLI overrides.
- *
- * Priority:
- *   1. --db-uri flag
- *   2. --target flag => look up in config targets
- *   3. Default engine target from config
- *   4. null (no target configured)
- */
-export function resolveTargetUri(
-  config: MergedConfig,
-  dbUri?: string,
-  targetName?: string,
-): string | null {
-  // 1. Explicit --db-uri
-  if (dbUri) return dbUri;
-
-  // 2. Explicit --target => look up in config
-  if (targetName) {
-    const t = config.targets[targetName];
-    if (t?.uri) return t.uri;
-    // Target name might itself be a URI
-    if (targetName.includes("://")) return targetName;
-    return null;
-  }
-
-  // 3. Default engine target
-  const engineName = config.core.engine;
-  if (engineName) {
-    const engine = config.engines[engineName];
-    if (engine?.target) {
-      // engine.target could be a target name or URI
-      const t = config.targets[engine.target];
-      if (t?.uri) return t.uri;
-      if (engine.target.includes("://")) return engine.target;
-    }
-  }
-
-  return null;
-}
 
 /**
  * Compute deployment status by comparing a plan against deployed changes.
@@ -331,47 +293,42 @@ export async function runStatus(args: ParsedArgs): Promise<void> {
   }
 
   // Connect to database and read deployed changes
-  const { DatabaseClient } = await import("../db/client");
   const { Registry } = await import("../db/registry");
   const { ExpandContractTracker } = await import("../expand-contract/tracker");
 
-  const client = new DatabaseClient(targetUri, {
-    command: "status",
-    project: plan.project.name,
-  });
-  await client.connect();
+  await withDatabase(
+    targetUri,
+    { command: "status", project: plan.project.name },
+    async (db) => {
+      const registry = new Registry(db);
+      const deployedChanges = await registry.getDeployedChanges(plan.project.name);
 
-  try {
-    const registry = new Registry(client);
-    const deployedChanges = await registry.getDeployedChanges(plan.project.name);
+      // Query expand/contract state (best-effort -- table may not exist)
+      let ecOperations: ExpandContractStatus[] = [];
+      try {
+        const tracker = new ExpandContractTracker(db);
+        const activeOps = await tracker.listActiveOperations(plan.project.name);
+        ecOperations = activeOps.map((op) => ({
+          change_name: op.change_name,
+          phase: op.phase,
+          table: `${op.table_schema}.${op.table_name}`,
+          started_at: op.started_at instanceof Date
+            ? op.started_at.toISOString()
+            : String(op.started_at),
+          started_by: op.started_by,
+        }));
+      } catch {
+        // expand_contract_state table may not exist yet -- that's fine
+      }
 
-    // Query expand/contract state (best-effort — table may not exist)
-    let ecOperations: ExpandContractStatus[] = [];
-    try {
-      const tracker = new ExpandContractTracker(client);
-      const activeOps = await tracker.listActiveOperations(plan.project.name);
-      ecOperations = activeOps.map((op) => ({
-        change_name: op.change_name,
-        phase: op.phase,
-        table: `${op.table_schema}.${op.table_name}`,
-        started_at: op.started_at instanceof Date
-          ? op.started_at.toISOString()
-          : String(op.started_at),
-        started_by: op.started_by,
-      }));
-    } catch {
-      // expand_contract_state table may not exist yet — that's fine
-    }
+      const deployDir = join(topDir, config.core.deploy_dir);
+      const result = computeStatus(plan, deployedChanges, targetUri, deployDir, ecOperations);
 
-    const deployDir = join(topDir, config.core.deploy_dir);
-    const result = computeStatus(plan, deployedChanges, targetUri, deployDir, ecOperations);
-
-    if (options.format === "json") {
-      jsonOut(result);
-    } else {
-      info(formatStatusText(result));
-    }
-  } finally {
-    await client.disconnect();
-  }
+      if (options.format === "json") {
+        jsonOut(result);
+      } else {
+        info(formatStatusText(result));
+      }
+    },
+  );
 }

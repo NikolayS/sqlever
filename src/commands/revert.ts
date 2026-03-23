@@ -14,7 +14,7 @@
 import { resolve, join } from "node:path";
 import { readFileSync } from "node:fs";
 import type { ParsedArgs } from "../cli";
-import { loadConfig, type MergedConfig } from "../config/index";
+import { loadConfig } from "../config/index";
 import { parsePlan } from "../plan/parser";
 import type { Plan, Change as PlanChange } from "../plan/types";
 import { DatabaseClient } from "../db/client";
@@ -28,6 +28,7 @@ import { PsqlRunner, type PsqlRunResult } from "../psql";
 import { ShutdownManager } from "../signals";
 import { info, error as logError, verbose } from "../output";
 import { isNonTransactional } from "./deploy";
+import { resolveTargetUri } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Exit codes (SPEC R6)
@@ -99,34 +100,6 @@ export function parseRevertOptions(args: ParsedArgs): RevertOptions {
   }
 
   return opts;
-}
-
-// ---------------------------------------------------------------------------
-// Resolve target URI from config and options
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the database connection URI from the combined config sources.
- *
- * Precedence: --db-uri > target lookup > engine default target.
- */
-export function resolveTargetUri(
-  opts: RevertOptions,
-  config: MergedConfig,
-): string | undefined {
-  // CLI --db-uri takes precedence
-  if (opts.dbUri) return opts.dbUri;
-
-  // Named target lookup
-  const targetName = opts.target ?? config.engines.pg?.target;
-  if (targetName && config.targets[targetName]) {
-    return config.targets[targetName]!.uri;
-  }
-
-  // Fall back to engine target (which may be a URI like db:pg://...)
-  if (targetName) return targetName;
-
-  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +282,7 @@ export async function runRevert(
   }
 
   // Resolve target URI
-  const targetUri = resolveTargetUri(options, config);
+  const targetUri = resolveTargetUri(config, options.dbUri, options.target);
   if (!targetUri) {
     logError(
       "No database target specified. Use --db-uri or configure a target in sqitch.conf.",

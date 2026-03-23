@@ -46,10 +46,10 @@ const {
   computeChangesToRevert,
   buildRevertInput,
   confirmRevert,
-  resolveTargetUri,
   runRevert,
   EXIT_CODE_CONCURRENT,
 } = await import("../../src/commands/revert");
+const { resolveTargetUri } = await import("../../src/commands/shared");
 const { parseArgs } = await import("../../src/cli");
 const { isNonTransactional } = await import("../../src/commands/deploy");
 
@@ -340,27 +340,28 @@ describe("revert command", () => {
   describe("resolveTargetUri()", () => {
     it("returns --db-uri when provided", () => {
       const uri = resolveTargetUri(
-        { dbUri: "postgresql://host/db", noPrompt: false, topDir: "." },
         { targets: {}, engines: {} } as never,
+        "postgresql://host/db",
       );
       expect(uri).toBe("postgresql://host/db");
     });
 
     it("looks up named target from config", () => {
       const uri = resolveTargetUri(
-        { target: "prod", noPrompt: false, topDir: "." },
         {
           targets: { prod: { name: "prod", uri: "postgresql://prod/db" } },
           engines: {},
         } as never,
+        undefined,
+        "prod",
       );
       expect(uri).toBe("postgresql://prod/db");
     });
 
     it("falls back to engine target string", () => {
       const uri = resolveTargetUri(
-        { noPrompt: false, topDir: "." },
         {
+          core: { engine: "pg" },
           targets: {},
           engines: { pg: { name: "pg", target: "db:pg://local/mydb" } },
         } as never,
@@ -368,12 +369,11 @@ describe("revert command", () => {
       expect(uri).toBe("db:pg://local/mydb");
     });
 
-    it("returns undefined when no target configured", () => {
+    it("returns null when no target configured", () => {
       const uri = resolveTargetUri(
-        { noPrompt: false, topDir: "." },
-        { targets: {}, engines: {} } as never,
+        { core: { engine: undefined }, targets: {}, engines: {} } as never,
       );
-      expect(uri).toBeUndefined();
+      expect(uri).toBeNull();
     });
   });
 

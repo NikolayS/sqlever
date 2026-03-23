@@ -15,6 +15,7 @@ import { parsePlan } from "../plan/parser";
 import type { Change, Plan, Tag } from "../plan/types";
 import { info, error, json as jsonOut } from "../output";
 import type { ParsedArgs } from "../cli";
+import { resolveTargetUri, withDatabase } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -280,38 +281,6 @@ export function formatDiffText(result: DiffResult): string {
 }
 
 // ---------------------------------------------------------------------------
-// Target resolution (shared logic, duplicated to avoid circular deps)
-// ---------------------------------------------------------------------------
-
-function resolveTargetUri(
-  config: ReturnType<typeof loadConfig>,
-  dbUri?: string,
-  targetName?: string,
-): string | null {
-  if (dbUri) return dbUri;
-
-  if (targetName) {
-    const t = config.targets[targetName];
-    if (t?.uri) return t.uri;
-    if (targetName.includes("://")) return targetName;
-    return null;
-  }
-
-  const engineName = config.core.engine;
-  if (engineName && config.engines[engineName]) {
-    const engineTarget = config.engines[engineName]!.target;
-    if (engineTarget && config.targets[engineTarget]) {
-      return config.targets[engineTarget]!.uri ?? null;
-    }
-    if (engineTarget && engineTarget.includes("://")) {
-      return engineTarget;
-    }
-  }
-
-  return null;
-}
-
-// ---------------------------------------------------------------------------
 // Main command runner
 // ---------------------------------------------------------------------------
 
@@ -360,22 +329,17 @@ export async function runDiff(args: ParsedArgs): Promise<void> {
   let deployedChangeIds = new Set<string>();
 
   if (targetUri) {
-    const { DatabaseClient } = await import("../db/client");
     const { Registry } = await import("../db/registry");
 
-    const client = new DatabaseClient(targetUri, {
-      command: "diff",
-      project: plan.project.name,
-    });
-    await client.connect();
-
-    try {
-      const registry = new Registry(client);
-      const deployedChanges = await registry.getDeployedChanges(plan.project.name);
-      deployedChangeIds = new Set(deployedChanges.map((c) => c.change_id));
-    } finally {
-      await client.disconnect();
-    }
+    deployedChangeIds = await withDatabase(
+      targetUri,
+      { command: "diff", project: plan.project.name },
+      async (db) => {
+        const registry = new Registry(db);
+        const deployedChanges = await registry.getDeployedChanges(plan.project.name);
+        return new Set(deployedChanges.map((c) => c.change_id));
+      },
+    );
   }
 
   // Compute the diff
