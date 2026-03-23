@@ -12,7 +12,7 @@
 //   - Release advisory lock, print summary
 
 import { resolve, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import type { ParsedArgs } from "../cli";
 import { loadConfig } from "../config/index";
 import type { Plan, Change as PlanChange } from "../plan/types";
