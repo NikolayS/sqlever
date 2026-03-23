@@ -51,7 +51,7 @@ const {
 } = await import("../../src/commands/revert");
 const { resolveTargetUri } = await import("../../src/commands/shared");
 const { parseArgs } = await import("../../src/cli");
-const { isNonTransactional } = await import("../../src/commands/deploy");
+const { isAutoCommit, isNonTransactional } = await import("../../src/commands/deploy");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -556,22 +556,28 @@ describe("revert command", () => {
   });
 
   // -----------------------------------------------------------------------
-  // Bug fix: revert ignores -- sqlever:no-transaction directive
+  // Bug fix: revert ignores -- sqlever:auto-commit directive
   // -----------------------------------------------------------------------
 
-  describe("revert respects -- sqlever:no-transaction directive", () => {
-    it("a revert script with -- sqlever:no-transaction should NOT use --single-transaction", () => {
-      const scriptContent = "-- sqlever:no-transaction\nDROP INDEX CONCURRENTLY IF EXISTS idx_foo;\n";
-      expect(isNonTransactional(scriptContent)).toBe(true);
-      // singleTransaction should be !isNonTransactional = false
-      const singleTransaction = !isNonTransactional(scriptContent);
+  describe("revert respects -- sqlever:auto-commit directive", () => {
+    it("a revert script with -- sqlever:auto-commit should NOT use --single-transaction", () => {
+      const scriptContent = "-- sqlever:auto-commit\nDROP INDEX CONCURRENTLY IF EXISTS idx_foo;\n";
+      expect(isAutoCommit(scriptContent)).toBe(true);
+      // singleTransaction should be !isAutoCommit = false
+      const singleTransaction = !isAutoCommit(scriptContent);
       expect(singleTransaction).toBe(false);
+    });
+
+    it("a revert script with legacy -- sqlever:no-transaction should NOT use --single-transaction", () => {
+      const scriptContent = "-- sqlever:no-transaction\nDROP INDEX CONCURRENTLY IF EXISTS idx_foo;\n";
+      expect(isAutoCommit(scriptContent)).toBe(true);
+      expect(isNonTransactional(scriptContent)).toBe(true);
     });
 
     it("a normal revert script should NOT use --single-transaction (matching Sqitch)", () => {
       // Sqitch does NOT pass --single-transaction for revert scripts.
       const scriptContent = "DROP TABLE IF EXISTS foo;\n";
-      expect(isNonTransactional(scriptContent)).toBe(false);
+      expect(isAutoCommit(scriptContent)).toBe(false);
     });
 
     it("revert.ts source does not hardcode singleTransaction: true", () => {

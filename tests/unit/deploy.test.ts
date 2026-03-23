@@ -76,6 +76,7 @@ const {
   executeDeploy,
   runDeploy,
   projectLockKey,
+  isAutoCommit,
   isNonTransactional,
   parseDeployOptions,
   buildScriptNameMap,
@@ -272,28 +273,37 @@ describe("deploy", () => {
   });
 
   // -----------------------------------------------------------------------
-  // isNonTransactional
+  // isAutoCommit
   // -----------------------------------------------------------------------
 
-  describe("isNonTransactional()", () => {
-    it("returns true for scripts with no-transaction comment", () => {
-      expect(isNonTransactional("-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY ...")).toBe(true);
+  describe("isAutoCommit()", () => {
+    it("returns true for scripts with auto-commit directive", () => {
+      expect(isAutoCommit("-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY ...")).toBe(true);
     });
 
     it("returns true with varied spacing", () => {
-      expect(isNonTransactional("--  sqlever:no-transaction\nSELECT 1")).toBe(true);
+      expect(isAutoCommit("--  sqlever:auto-commit\nSELECT 1")).toBe(true);
     });
 
     it("returns true case-insensitively", () => {
-      expect(isNonTransactional("-- SQLEVER:NO-TRANSACTION\nSELECT 1")).toBe(true);
+      expect(isAutoCommit("-- SQLEVER:AUTO-COMMIT\nSELECT 1")).toBe(true);
     });
 
     it("returns false for normal scripts", () => {
-      expect(isNonTransactional("CREATE TABLE foo (id int);\n")).toBe(false);
+      expect(isAutoCommit("CREATE TABLE foo (id int);\n")).toBe(false);
     });
 
     it("returns false when comment is not on first line", () => {
-      expect(isNonTransactional("CREATE TABLE foo;\n-- sqlever:no-transaction\n")).toBe(false);
+      expect(isAutoCommit("CREATE TABLE foo;\n-- sqlever:auto-commit\n")).toBe(false);
+    });
+
+    it("supports legacy no-transaction directive for backward compat", () => {
+      expect(isAutoCommit("-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY ...")).toBe(true);
+    });
+
+    it("isNonTransactional alias works (backward compat)", () => {
+      expect(isNonTransactional("-- sqlever:auto-commit\nSELECT 1")).toBe(true);
+      expect(isNonTransactional("-- sqlever:no-transaction\nSELECT 1")).toBe(true);
     });
   });
 
@@ -796,11 +806,11 @@ describe("deploy", () => {
   });
 
   // -----------------------------------------------------------------------
-  // executeDeploy — non-transactional changes
+  // executeDeploy — auto-commit changes
   // -----------------------------------------------------------------------
 
-  describe("executeDeploy() — non-transactional changes", () => {
-    it("detects no-transaction marker and deploys without --single-transaction", async () => {
+  describe("executeDeploy() — auto-commit changes", () => {
+    it("detects auto-commit marker and deploys without --single-transaction", async () => {
       const plan = `%syntax-version=1.0.0
 %project=myproject
 
@@ -809,7 +819,7 @@ add_index 2025-01-02T00:00:00Z Test User <test@example.com> # Concurrent index
 `;
       writePlan(testDir, plan);
       writeDeployScript(testDir, "create_schema", "CREATE SCHEMA myapp;");
-      writeDeployScript(testDir, "add_index", "-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY idx_users_email ON users(email);");
+      writeDeployScript(testDir, "add_index", "-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY idx_users_email ON users(email);");
 
       // Track psql invocations
       const calls: Array<{ args: string[] }> = [];

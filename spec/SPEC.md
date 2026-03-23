@@ -58,7 +58,7 @@ https://github.com/pgq/pgq — 3-partition rotating queue table, entirely inside
 
 ### pg_index_pilot
 
-https://gitlab.com/postgres-ai/postgresai/-/tree/main/components/index_pilot — pure PL/pgSQL tool for managing `REINDEX INDEX CONCURRENTLY` operations. Key design patterns relevant to sqlever: (1) write-ahead tracking with three-state lifecycle (`in_progress` → `completed` | `failed`) for crash recovery of non-transactional DDL, (2) advisory lock coordination using schema OID and `pg_try_advisory_lock()` to prevent concurrent operations, (3) invalid index cleanup by checking `pg_index.indisvalid` and dropping `_ccnew` suffixed indexes left by failed `REINDEX CONCURRENTLY`, (4) explicit pre-DDL commit to release held locks before executing concurrent DDL. These patterns informed sqlever's non-transactional write-ahead tracking and `sqlever.pending_changes` design.
+https://gitlab.com/postgres-ai/postgresai/-/tree/main/components/index_pilot — pure PL/pgSQL tool for managing `REINDEX INDEX CONCURRENTLY` operations. Key design patterns relevant to sqlever: (1) write-ahead tracking with three-state lifecycle (`in_progress` → `completed` | `failed`) for crash recovery of auto-commit DDL, (2) advisory lock coordination using schema OID and `pg_try_advisory_lock()` to prevent concurrent operations, (3) invalid index cleanup by checking `pg_index.indisvalid` and dropping `_ccnew` suffixed indexes left by failed `REINDEX CONCURRENTLY`, (4) explicit pre-DDL commit to release held locks before executing concurrent DDL. These patterns informed sqlever's auto-commit write-ahead tracking and `sqlever.pending_changes` design.
 
 ### Atlas (Ariga)
 
@@ -154,7 +154,7 @@ All Sqitch commands must be supported with identical flags and semantics:
 | Command | Description |
 |---------|-------------|
 | `sqlever init [project]` | Initialize project, create `sqitch.conf` and `sqitch.plan` |
-| `sqlever add <name> [-n note] [-r dep] [--conflict dep]` | Add new change (supports `--no-transaction` pragma) |
+| `sqlever add <name> [-n note] [-r dep] [--conflict dep]` | Add new change (supports `--auto-commit` pragma) |
 | `sqlever deploy [target] [--to change] [--mode [all\|change\|tag]]` | Deploy changes |
 | `sqlever revert [target] [--to change] [-y]` | Revert changes |
 | `sqlever verify [target] [--from change] [--to change]` | Run verify scripts |
@@ -426,7 +426,7 @@ Analyze migration SQL before deploy and flag dangerous patterns. Moved from v1.1
 | `SA017` | error | hybrid | `ALTER COLUMN ... SET NOT NULL` (existing column) | Static: fires on any `SET NOT NULL` (on PG < 12, full table scan under `AccessExclusiveLock`; on PG 12+, metadata-only if a valid CHECK constraint exists). Connected: checks catalog for existing valid `CHECK (col IS NOT NULL)` constraint and suppresses if found. Recommend three-step: add CHECK NOT VALID, validate, then SET NOT NULL. |
 | `SA018` | warn | hybrid | `ADD PRIMARY KEY` without pre-existing index | Static: fires on `ADD PRIMARY KEY` without `USING INDEX` clause (`ALTER TABLE` takes `AccessExclusiveLock`, and the implicit index creation extends lock duration). Connected: checks catalog for pre-existing unique index on the PK columns and suppresses if found. Safe pattern: create index concurrently first, then `ADD CONSTRAINT ... USING INDEX`. |
 | `SA019` | warn | static | `REINDEX` without `CONCURRENTLY` | Takes `AccessExclusiveLock`. PG 12+ supports `REINDEX CONCURRENTLY`. |
-| `SA020` | error | static | `CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, or `REINDEX CONCURRENTLY` inside transactional deploy | Cannot run inside a transaction block — will fail at runtime. Change must be marked non-transactional. In project mode: checks plan file for non-transactional marker. In standalone mode: warns on any `CONCURRENTLY` usage with message "Ensure this runs outside a transaction block." Also recognizes `-- sqlever:no-transaction` script comment (sqlever-only convention, see non-transactional changes below). |
+| `SA020` | error | static | `CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, or `REINDEX CONCURRENTLY` inside transactional deploy | Cannot run inside a transaction block — will fail at runtime. Change must be marked auto-commit. In project mode: checks plan file for auto-commit marker. In standalone mode: warns on any `CONCURRENTLY` usage with message "Ensure this runs outside a transaction block." Also recognizes `-- sqlever:auto-commit` script comment (sqlever-only convention, see auto-commit changes below). Legacy `-- sqlever:no-transaction` is also accepted. |
 | `SA021` | warn | static | `LOCK TABLE` (any mode) | Explicit locking in migrations is a code smell and dangerous in production. |
 
 **SA003 safe cast allowlist:** The following type changes are known to be safe (no table rewrite, binary-compatible):
@@ -744,7 +744,7 @@ Depth beats breadth. Sqitch's multi-DB support is one reason it can't do PG-spec
 
 We use the existing Sqitch tables (`sqitch.changes`, etc.) rather than our own schema. Reason: zero migration cost for existing Sqitch users. A team can `alias sqitch=sqlever` and evaluate us before committing. This is the adoption path.
 
-**`sqlever.*` schema:** When sqlever-specific features are used, a separate `sqlever.*` schema is created. This includes non-transactional deploy (which uses `sqlever.pending_changes` for write-ahead tracking), expand/contract, and batched DML. The schema is created on first use of any of these features — for example, on the first deploy that includes a non-transactional change. The `sqlever.*` schema is independent of `sqitch.*` and can be safely dropped if reverting to Sqitch (advanced features will stop working, but core migration tracking is unaffected).
+**`sqlever.*` schema:** When sqlever-specific features are used, a separate `sqlever.*` schema is created. This includes auto-commit deploy (which uses `sqlever.pending_changes` for write-ahead tracking), expand/contract, and batched DML. The schema is created on first use of any of these features — for example, on the first deploy that includes an auto-commit change. The `sqlever.*` schema is independent of `sqitch.*` and can be safely dropped if reverting to Sqitch (advanced features will stop working, but core migration tracking is unaffected).
 
 ### DD4 — SQL parser
 
@@ -808,7 +808,7 @@ Sqitch also sets `ON_ERROR_STOP=1` when invoking psql, which aborts on the first
 
 **Implications:**
 - psql must be installed on the deploy machine. The `--db-client` flag specifies the psql path (default: `psql` from `$PATH`).
-- sqlever sets `ON_ERROR_STOP=1`, disables `.psqlrc` (via `PSQLRC=/dev/null` and `--no-psqlrc`), and passes `--single-transaction` or not depending on `--mode` and `--no-transaction`.
+- sqlever sets `ON_ERROR_STOP=1`, disables `.psqlrc` (via `PSQLRC=/dev/null` and `--no-psqlrc`), and passes `--single-transaction` or not depending on `--mode` and `--auto-commit`.
 - `--set key=value` is passed directly to psql as `-v key=value`, preserving full psql variable interpolation (`:variable`, `:'variable'`, `:{?variable}`).
 - Error handling: sqlever parses psql's stderr for error messages and exit code for success/failure. Structured error extraction is best-effort — psql does not emit machine-readable errors.
 - `node-postgres` (`pg` package) is still used for tracking table operations (`sqitch.*`, `sqlever.*`), advisory locks, schema introspection, and batch DML. It is NOT used for executing migration scripts.
@@ -829,7 +829,7 @@ If using psql, Sqitch does NOT wrap deploy scripts in a transaction managed by S
 **The problem:** Most production PostgreSQL deployments use PgBouncer for connection pooling. PgBouncer in transaction mode has significant implications for sqlever:
 
 - `pg_advisory_lock` (session-level) does not work through PgBouncer in transaction mode — the lock is tied to the backend connection, which PgBouncer may reassign between transactions.
-- `pg_advisory_xact_lock` (transaction-level) releases at transaction end — it cannot span the entire deploy in `--mode change` (each change is a separate transaction) or across non-transactional changes. This makes it unsuitable for deploy coordination.
+- `pg_advisory_xact_lock` (transaction-level) releases at transaction end — it cannot span the entire deploy in `--mode change` (each change is a separate transaction) or across auto-commit changes. This makes it unsuitable for deploy coordination.
 - Session-level `SET` commands (`lock_timeout`, `statement_timeout`, `search_path`) may leak to other connections or be lost between transactions.
 - The batch worker's sleep interval between batches causes the connection to return to the pool; the next batch may run on a different backend.
 
@@ -844,7 +844,7 @@ If using psql, Sqitch does NOT wrap deploy scripts in a transaction managed by S
 
 Deploy connections should set:
 - `application_name = 'sqlever/<command>/<project>'` — e.g., `sqlever/deploy/myproject`. Visible in `pg_stat_activity`, critical for DBAs diagnosing lock contention or long-running queries during incidents.
-- `statement_timeout = 0` (or a configurable high value) — migrations are inherently long-running; a global `statement_timeout` (common in production, e.g., 30s) will kill legitimate operations like `VALIDATE CONSTRAINT`. For non-transactional DDL (e.g., `CREATE INDEX CONCURRENTLY`), a separate configurable timeout applies (default: 4 hours, configurable via `sqlever.toml` `[deploy] non_transactional_statement_timeout`). This prevents indefinite hangs while allowing legitimately long operations.
+- `statement_timeout = 0` (or a configurable high value) — migrations are inherently long-running; a global `statement_timeout` (common in production, e.g., 30s) will kill legitimate operations like `VALIDATE CONSTRAINT`. For auto-commit DDL (e.g., `CREATE INDEX CONCURRENTLY`), a separate configurable timeout applies (default: 4 hours, configurable via `sqlever.toml` `[deploy] auto_commit_statement_timeout`). This prevents indefinite hangs while allowing legitimately long operations.
 - `idle_in_transaction_session_timeout` — set to a configurable generous value (default: 10 minutes), not unlimited. This provides a safety net against hung deploy processes (e.g., operator walks away during a TUI prompt) without interfering with normal operation. Configurable via `sqlever.toml` `[deploy] idle_in_transaction_session_timeout`.
 - `lock_timeout` — set by the lock timeout guard (5.9), per-migration configurable.
 - `search_path` — respect the database/role default (Sqitch-compatible behavior). Sqitch does not set `search_path`; sqlever follows suit. Override available via `sqlever.toml` `[deploy] search_path` for teams that want explicit control.
@@ -969,7 +969,7 @@ sqlever deploy
       → run static analysis
       → if error: abort (unless --force)
       → if warn: print, continue
-      → if change is non-transactional:
+      → if change is auto-commit:
           → execute deploy script WITHOUT transaction wrapper
           → on success: BEGIN; update sqitch.changes, sqitch.events, sqitch.dependencies; COMMIT
           → on failure: report error, note that partial DDL may remain (e.g., INVALID index)
@@ -985,9 +985,9 @@ sqlever deploy
 
 **Advisory lock release:** `pg_advisory_unlock()` must be called on ALL exit paths — successful completion, deploy failure (analysis block, script error, verification failure), and user abort. Disconnect-based release (PG automatically releases session-level advisory locks on disconnect) is the safety net for crashes, not the primary unlock mechanism. Implementations must use a `finally`-style pattern to ensure the unlock call is always reached.
 
-**Non-transactional changes:** sqlever marks non-transactional changes via a plan file pragma added by `sqlever add --no-transaction`. Additionally, sqlever recognizes a `-- sqlever:no-transaction` comment on the first line of the deploy script as a sqlever-only convention. **Note:** Sqitch does NOT have a `-- sqitch-no-transaction` convention — no evidence of this mechanism exists in the Sqitch source code. Sqitch always wraps changes in `begin_work`/`finish_work`. The script comment convention is a sqlever-only innovation for standalone linter mode (SA020 detection) and should not be described as Sqitch-compatible. During deploy, non-transactional changes execute without `BEGIN`/`COMMIT` wrapping. A separate configurable `statement_timeout` applies to non-transactional DDL (default: 4 hours, configurable via `sqlever.toml` `[deploy] non_transactional_statement_timeout`).
+**Auto-commit changes:** sqlever marks auto-commit changes via a plan file pragma added by `sqlever add --auto-commit`. Additionally, sqlever recognizes a `-- sqlever:auto-commit` comment on the first line of the deploy script as a sqlever-only convention. The legacy `-- sqlever:no-transaction` directive is also accepted for backward compatibility. **Note:** Sqitch does NOT have a `-- sqitch-no-transaction` convention — no evidence of this mechanism exists in the Sqitch source code. Sqitch always wraps changes in `begin_work`/`finish_work`. The script comment convention is a sqlever-only innovation for standalone linter mode (SA020 detection) and should not be described as Sqitch-compatible. During deploy, auto-commit changes execute without `BEGIN`/`COMMIT` wrapping (each statement commits via its own implicit transaction). A separate configurable `statement_timeout` applies to auto-commit DDL (default: 4 hours, configurable via `sqlever.toml` `[deploy] auto_commit_statement_timeout`).
 
-**Non-transactional write-ahead tracking:** Before executing non-transactional DDL, sqlever writes a "pending" record to `sqlever.pending_changes` (in its own committed transaction). After the DDL succeeds, the record is updated to "complete" and the sqitch tracking tables are updated. On the next deploy, sqlever checks for any "pending" non-transactional changes and verifies their state before deciding to skip or retry. This handles the case where sqlever crashes between DDL execution and tracking table update. **Note:** `sqlever.pending_changes` reads and writes are protected by the same session-level deploy advisory lock (DD13). The advisory lock prevents concurrent deploys from simultaneously reading or acting on pending records — without it, two processes could both attempt to verify and resolve the same pending change.
+**Auto-commit write-ahead tracking:** Before executing auto-commit DDL, sqlever writes a "pending" record to `sqlever.pending_changes` (in its own committed transaction). After the DDL succeeds, the record is updated to "complete" and the sqitch tracking tables are updated. On the next deploy, sqlever checks for any "pending" auto-commit changes and verifies their state before deciding to skip or retry. This handles the case where sqlever crashes between DDL execution and tracking table update. **Note:** `sqlever.pending_changes` reads and writes are protected by the same session-level deploy advisory lock (DD13). The advisory lock prevents concurrent deploys from simultaneously reading or acting on pending records — without it, two processes could both attempt to verify and resolve the same pending change.
 
 **`sqlever.pending_changes` schema:**
 ```sql
@@ -1003,18 +1003,18 @@ CREATE TABLE sqlever.pending_changes (
 );
 ```
 
-**Non-transactional verify logic:** When sqlever finds a "pending" record on the next deploy, it verifies the change's state. For index operations (`CREATE INDEX CONCURRENTLY`), sqlever checks `pg_index.indisvalid` to determine if the index was successfully created. For other DDL, sqlever runs the change's verify script (if one exists). Automated verification only works for known DDL patterns — for arbitrary DDL without a verify script, sqlever reports the pending state and requires manual resolution.
+**Auto-commit verify logic:** When sqlever finds a "pending" record on the next deploy, it verifies the change's state. For index operations (`CREATE INDEX CONCURRENTLY`), sqlever checks `pg_index.indisvalid` to determine if the index was successfully created. For other DDL, sqlever runs the change's verify script (if one exists). Automated verification only works for known DDL patterns — for arbitrary DDL without a verify script, sqlever reports the pending state and requires manual resolution.
 
-Failure recovery for non-transactional DDL is fundamentally different: a failed `CREATE INDEX CONCURRENTLY` leaves an `INVALID` index that must be cleaned up. The error message must include the exact command to drop the INVALID index before retrying.
+Failure recovery for auto-commit DDL is fundamentally different: a failed `CREATE INDEX CONCURRENTLY` leaves an `INVALID` index that must be cleaned up. The error message must include the exact command to drop the INVALID index before retrying.
 
-**`ALTER TYPE ... ADD VALUE` note:** On PG < 12, `ALTER TYPE ... ADD VALUE` cannot run inside a transaction block and must be marked non-transactional. On PG 12+, it can run inside a transaction, but the new enum value is **not usable within the same transaction** — an `INSERT` using the new value in the same transaction will fail. If a deploy script does `ALTER TYPE ... ADD VALUE 'x'` followed by `INSERT ... VALUES ('x')`, they must be in separate changes or the change must be non-transactional.
+**`ALTER TYPE ... ADD VALUE` note:** On PG < 12, `ALTER TYPE ... ADD VALUE` cannot run inside a transaction block and must be marked auto-commit. On PG 12+, it can run inside a transaction, but the new enum value is **not usable within the same transaction** — an `INSERT` using the new value in the same transaction will fail. If a deploy script does `ALTER TYPE ... ADD VALUE 'x'` followed by `INSERT ... VALUES ('x')`, they must be in separate changes or the change must be auto-commit.
 
 **Transaction scope by `--mode`:**
 - `change` (default): each change in its own transaction (as shown above).
 - `all`: all changes in a single transaction. Failure rolls back everything including tracking table updates. Note: this is a sqlever improvement — Sqitch uses per-change transactions with explicit revert on failure (see DD12).
 - `tag`: changes grouped by tag, each tag-group in a single transaction.
 
-Non-transactional changes always execute outside any transaction regardless of `--mode`. In `--mode all`, non-transactional changes break the surrounding transaction: sqlever issues `COMMIT` before the non-transactional DDL, executes it, then issues `BEGIN` to continue with subsequent changes. This means `--mode all` cannot guarantee atomicity when non-transactional changes are present. If a transactional change fails after a non-transactional change has already committed, the non-transactional DDL remains deployed (its tracking update was committed separately). The subsequent transactional changes roll back, including their tracking records. This leaves a partially-deployed state where `sqlever status` correctly reports which changes are deployed and which are not. sqlever emits a warning at the start of deploy when `--mode all` is used with a plan containing non-transactional changes.
+Auto-commit changes always execute outside any explicit transaction regardless of `--mode`. In `--mode all`, auto-commit changes break the surrounding transaction: sqlever issues `COMMIT` before the auto-commit DDL, executes it, then issues `BEGIN` to continue with subsequent changes. This means `--mode all` cannot guarantee atomicity when auto-commit changes are present. If a transactional change fails after an auto-commit change has already committed, the auto-commit DDL remains deployed (its tracking update was committed separately). The subsequent transactional changes roll back, including their tracking records. This leaves a partially-deployed state where `sqlever status` correctly reports which changes are deployed and which are not. sqlever emits a warning at the start of deploy when `--mode all` is used with a plan containing auto-commit changes.
 
 ---
 
@@ -1105,14 +1105,14 @@ PG < 14 is best-effort/untested. Version-aware rules (SA002b) still fire based o
 |---------|-------------|
 | `init` | Creates sqitch.conf, sqitch.plan, deploy/ revert/ verify/ dirs |
 | `add` | Creates correctly named files, appends to plan, handles `-r` deps and `--conflict` |
-| `add --no-transaction` | Plan entry contains no-transaction pragma |
+| `add --auto-commit` | Plan entry contains auto-commit pragma |
 | `deploy` | Executes SQL, updates sqitch.changes + sqitch.events + sqitch.dependencies, correct timestamps |
 | `deploy --to` | Stops at specified change, tracking state correct |
 | `deploy --dry-run` | Zero DB changes (verified via table counts before/after) |
 | `deploy --mode change` | Each change in own transaction, stops on first failure, tracking state consistent |
 | `deploy --mode all` | All changes in single transaction (sqlever improvement over Sqitch's per-change txn + explicit revert), failure rolls back everything |
 | `deploy --mode tag` | Changes grouped by tag, each group in a transaction |
-| `deploy` (non-transactional) | `CREATE INDEX CONCURRENTLY` executes without transaction wrapper, tracking updated separately |
+| `deploy` (auto-commit) | `CREATE INDEX CONCURRENTLY` executes without transaction wrapper, tracking updated separately |
 | `revert` | Reverts in reverse dependency order, updates tracking tables |
 | `revert --to` | Reverts to specified change, not further |
 | `verify` | Runs verify script, PASS/FAIL per change, correct exit code |
@@ -1188,7 +1188,7 @@ The most important test suite. Sqitch is the ground truth. We run identical oper
 | `reworked/` | Changes reworked with `@tag` references |
 | `cross-project/` | Cross-project dependencies (`project:change`) |
 | `conflicts/` | Changes with conflict dependencies |
-| `non-transactional/` | Changes marked `--no-transaction` |
+| `auto-commit/` | Changes marked `--auto-commit` |
 | `mid-deploy/` | Project partially deployed by Sqitch, sqlever continues |
 | `planner-edge-cases/` | Plan entries with commas in planner names (`First,Last,,`), trailing spaces, blank lines mid-plan |
 | `missing-verify/` | Deploy scripts with no corresponding verify file; test `--verify` skips gracefully |
@@ -1247,7 +1247,7 @@ tests/fixtures/analysis/
     trigger/
       concurrent_index_in_transaction.sql       # must trigger
     no_trigger/
-      concurrent_index_no_transaction.sql       # must NOT trigger
+      concurrent_index_auto_commit.sql           # must NOT trigger
     ...
 ```
 
@@ -1413,24 +1413,24 @@ After this phase: drop-in replacement for all Sqitch commands.
 - [ ] Change ID computation: SHA-1 algorithm matching Sqitch byte-for-byte
 - [ ] `src/db/registry.ts`: read/write `sqitch.changes`, `sqitch.events`, `sqitch.tags`, `sqitch.projects`, `sqitch.dependencies`
 - [ ] `sqlever init`: creates sqitch.conf, sqitch.plan, deploy/revert/verify dirs
-- [ ] `sqlever add`: creates migration files, appends to plan (supports `--no-transaction`, `--conflict`)
+- [ ] `sqlever add`: creates migration files, appends to plan (supports `--auto-commit`, `--conflict`)
 - [ ] Tests: plan round-trip, init, add, change ID verification against Sqitch
 
 **Sprint 3 — deploy + revert**
 - [ ] `src/commands/deploy.ts`: topological sort, execute deploy scripts, update tracking
 - [ ] Advisory lock acquisition at deploy start: `pg_try_advisory_lock(<lock_key>)` (non-blocking default) or `pg_advisory_lock(<lock_key>)` with `lock_timeout` (wait mode) — session-level, released on completion or disconnect. Lock key: application-computed stable hash (not `hashtext()`)
-- [ ] Non-transactional change support (execute without BEGIN/COMMIT, track separately)
+- [ ] Auto-commit change support (execute without BEGIN/COMMIT, track separately)
 - [ ] `src/commands/revert.ts`: execute revert scripts in reverse order, update tracking
 - [ ] `--to <change>` flag for both
 - [ ] `--dry-run` flag
 - [ ] `--mode [all|change|tag]` flag with correct transaction boundaries
 - [ ] `--log-only` flag (record as deployed without executing)
 - [ ] `--set` variable substitution
-- [ ] Deploy connection session settings (application_name, statement_timeout=0, idle_in_transaction_session_timeout=10min, non_transactional_statement_timeout=4h)
+- [ ] Deploy connection session settings (application_name, statement_timeout=0, idle_in_transaction_session_timeout=10min, auto_commit_statement_timeout=4h)
 - [ ] Lock timeout guard: auto-prepend `SET lock_timeout` before risky DDL (configurable, enabled by default)
 - [ ] Conflict dependency checking
 - [ ] Partial deploy / revert with dependency validation
-- [ ] Tests: deploy/revert, partial, dry-run, failed deploy recovery, advisory locks, non-transactional deploy
+- [ ] Tests: deploy/revert, partial, dry-run, failed deploy recovery, advisory locks, auto-commit deploy
 
 **Sprint 4 — verify + status + log + remaining commands**
 - [ ] `sqlever verify`: run verify scripts, report pass/fail per change

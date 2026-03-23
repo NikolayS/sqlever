@@ -83,6 +83,7 @@ const {
   runDeploy,
   parseDeployOptions,
   projectLockKey,
+  isAutoCommit,
   isNonTransactional,
   ADVISORY_LOCK_NAMESPACE,
   EXIT_CONCURRENT_DEPLOY,
@@ -152,7 +153,7 @@ create_schema 2025-01-01T00:00:00Z Test User <test@example.com> # Create schema
 add_users [nonexistent_thing] 2025-01-02T00:00:00Z Test User <test@example.com> # Add users table
 `;
 
-/** A plan with a single non-transactional change */
+/** A plan with a single auto-commit change */
 const NON_TXN_PLAN = `%syntax-version=1.0.0
 %project=myproject
 
@@ -700,22 +701,26 @@ describe("deploy failure recovery", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 6. Non-transactional change detection (-- sqlever:no-transaction)
+  // 6. Auto-commit change detection (-- sqlever:auto-commit)
   // -----------------------------------------------------------------------
 
-  describe("non-transactional change detection", () => {
-    it("isNonTransactional detects the marker on the first line", () => {
-      expect(isNonTransactional("-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY ...")).toBe(true);
+  describe("auto-commit change detection", () => {
+    it("isAutoCommit detects the marker on the first line", () => {
+      expect(isAutoCommit("-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY ...")).toBe(true);
     });
 
-    it("isNonTransactional returns false for second-line marker", () => {
-      expect(isNonTransactional("SELECT 1;\n-- sqlever:no-transaction")).toBe(false);
+    it("isAutoCommit returns false for second-line marker", () => {
+      expect(isAutoCommit("SELECT 1;\n-- sqlever:auto-commit")).toBe(false);
     });
 
-    it("deploys non-transactional script without --single-transaction", async () => {
+    it("isAutoCommit accepts legacy no-transaction directive", () => {
+      expect(isAutoCommit("-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY ...")).toBe(true);
+    });
+
+    it("deploys auto-commit script without --single-transaction", async () => {
       writePlan(testDir, NON_TXN_PLAN);
       writeDeployScript(testDir, "create_schema", "CREATE SCHEMA myapp;");
-      writeDeployScript(testDir, "add_index", "-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY idx ON users(email);");
+      writeDeployScript(testDir, "add_index", "-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY idx ON users(email);");
 
       const { runner, calls } = createTrackingPsqlRunner();
       const deps = await createDeps();
@@ -731,10 +736,10 @@ describe("deploy failure recovery", () => {
       expect(calls[1]!.args).not.toContain("--single-transaction");
     });
 
-    it("records non-transactional change in tracking tables on success", async () => {
+    it("records auto-commit change in tracking tables on success", async () => {
       writePlan(testDir, NON_TXN_PLAN);
       writeDeployScript(testDir, "create_schema", "CREATE SCHEMA myapp;");
-      writeDeployScript(testDir, "add_index", "-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY idx ON users(email);");
+      writeDeployScript(testDir, "add_index", "-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY idx ON users(email);");
 
       const deps = await createDeps();
       const options = defaultOptions(testDir);
@@ -751,10 +756,10 @@ describe("deploy failure recovery", () => {
       expect(changeInserts[1]!.values![2]).toBe("add_index");
     });
 
-    it("does not record non-transactional change in tracking tables on failure", async () => {
+    it("does not record auto-commit change in tracking tables on failure", async () => {
       writePlan(testDir, NON_TXN_PLAN);
       writeDeployScript(testDir, "create_schema", "CREATE SCHEMA myapp;");
-      writeDeployScript(testDir, "add_index", "-- sqlever:no-transaction\nCREATE INDEX CONCURRENTLY idx ON users(email);");
+      writeDeployScript(testDir, "add_index", "-- sqlever:auto-commit\nCREATE INDEX CONCURRENTLY idx ON users(email);");
 
       const deps = await createDeps({ failOnScript: "add_index" });
       const options = defaultOptions(testDir);

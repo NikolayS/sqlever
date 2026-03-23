@@ -8,23 +8,25 @@
  * REINDEX CONCURRENTLY usage. These operations cannot run inside a
  * transaction block and will fail at runtime if attempted.
  *
- * In project mode, the analyzer would check the plan file for a
- * non-transactional marker. In standalone mode, this rule warns on
+ * In project mode, the analyzer would check the plan file for an
+ * auto-commit marker. In standalone mode, this rule warns on
  * any CONCURRENTLY usage with guidance to ensure it runs outside a
  * transaction block.
  *
- * Also recognizes the -- sqlever:no-transaction script comment
- * (sqlever-only convention) to suppress the warning.
+ * Also recognizes the -- sqlever:auto-commit (or legacy
+ * -- sqlever:no-transaction) script comment (sqlever-only convention)
+ * to suppress the warning.
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
 import { offsetToLocation } from "../types.js";
 
 /**
- * Check if the SQL contains a -- sqlever:no-transaction comment.
+ * Check if the SQL contains a -- sqlever:auto-commit or
+ * -- sqlever:no-transaction (legacy) directive comment.
  */
-function hasNoTransactionComment(rawSql: string): boolean {
-  return /--\s*sqlever:no-transaction/i.test(rawSql);
+function hasAutoCommitDirective(rawSql: string): boolean {
+  return /--\s*sqlever:(auto-commit|no-transaction)/i.test(rawSql);
 }
 
 export const SA020: Rule = {
@@ -38,8 +40,8 @@ export const SA020: Rule = {
 
     if (!ast?.stmts) return findings;
 
-    // If the file has a -- sqlever:no-transaction comment, skip
-    if (hasNoTransactionComment(rawSql)) return findings;
+    // If the file has a -- sqlever:auto-commit (or legacy no-transaction) directive, skip
+    if (hasAutoCommitDirective(rawSql)) return findings;
 
     for (const stmtEntry of ast.stmts) {
       const stmt = stmtEntry.stmt;
@@ -60,7 +62,7 @@ export const SA020: Rule = {
           message: `CREATE INDEX CONCURRENTLY "${idxName}" cannot run inside a transaction block.`,
           location,
           suggestion:
-            "Mark this migration as non-transactional, or add a -- sqlever:no-transaction comment. In sqitch, use a non-transactional change.",
+            "Mark this migration as auto-commit, or add a -- sqlever:auto-commit comment. In sqitch, use an auto-commit (non-transactional) change.",
         });
       }
 
@@ -94,7 +96,7 @@ export const SA020: Rule = {
           message: `DROP INDEX CONCURRENTLY ${nameStr} cannot run inside a transaction block.`,
           location,
           suggestion:
-            "Mark this migration as non-transactional, or add a -- sqlever:no-transaction comment. In sqitch, use a non-transactional change.",
+            "Mark this migration as auto-commit, or add a -- sqlever:auto-commit comment. In sqitch, use an auto-commit (non-transactional) change.",
         });
       }
 
@@ -122,7 +124,7 @@ export const SA020: Rule = {
             message: `REINDEX CONCURRENTLY on "${target}" cannot run inside a transaction block.`,
             location,
             suggestion:
-              "Mark this migration as non-transactional, or add a -- sqlever:no-transaction comment. In sqitch, use a non-transactional change.",
+              "Mark this migration as auto-commit, or add a -- sqlever:auto-commit comment. In sqitch, use an auto-commit (non-transactional) change.",
           });
         }
       }

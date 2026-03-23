@@ -27,9 +27,10 @@ on identical migration plans and comparing results:
    versioned path (e.g., `deploy/foo@bar.sql`). Fixed to use correct versioned
    script paths.
 
-4. **Revert ignoring `no-transaction` directive** (`35ffc53`) -- The
-   `-- sqlever:no-transaction` pragma was honored during deploy but silently
-   ignored during revert. Fixed to respect the directive in both directions.
+4. **Revert ignoring `auto-commit` directive** (`35ffc53`) -- The
+   `-- sqlever:auto-commit` (formerly `no-transaction`) pragma was honored during
+   deploy but silently ignored during revert. Fixed to respect the directive in
+   both directions.
 
 5. **Advisory lock leak on revert --to** (`6c861de`) -- When `revert --to` hit
    a validation error, the advisory lock was not released. Fixed to always

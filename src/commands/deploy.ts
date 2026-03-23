@@ -306,13 +306,24 @@ export function parseDeployOptions(args: ParsedArgs): DeployOptions {
 // ---------------------------------------------------------------------------
 
 /**
- * Check if a deploy script is marked as non-transactional.
- * Looks for `-- sqlever:no-transaction` on the first line.
+ * Check if a deploy script is marked as auto-commit (each statement
+ * commits via its own implicit transaction, vs --single-transaction
+ * which wraps everything in an explicit BEGIN/COMMIT).
+ *
+ * Looks for `-- sqlever:auto-commit` (preferred) or the legacy
+ * `-- sqlever:no-transaction` directive on the first line.
+ * Both are accepted for backward compatibility.
  */
-export function isNonTransactional(scriptContent: string): boolean {
+export function isAutoCommit(scriptContent: string): boolean {
   const firstLine = scriptContent.split("\n")[0] ?? "";
-  return /--\s*sqlever:no-transaction/i.test(firstLine);
+  return /--\s*sqlever:(auto-commit|no-transaction)/i.test(firstLine);
 }
+
+/**
+ * @deprecated Use isAutoCommit() instead.
+ * Kept as an alias for backward compatibility.
+ */
+export const isNonTransactional = isAutoCommit;
 
 /**
  * Resolve the path to a deploy/verify script.
@@ -404,8 +415,8 @@ export async function executeDeploy(
     for (const change of sortedChanges) {
       const sName = dryRunScriptNameMap.get(change.change_id) ?? change.name;
       const deployPath = scriptPath(topDir, deployDir, sName);
-      const noTxn = existsSync(deployPath) && isNonTransactional(readFileSync(deployPath, "utf-8"));
-      const marker = noTxn ? " [no-transaction]" : "";
+      const autoCommit = existsSync(deployPath) && isAutoCommit(readFileSync(deployPath, "utf-8"));
+      const marker = autoCommit ? " [auto-commit]" : "";
       info(`  + ${change.name}${marker}`);
     }
     return { deployed: 0, skipped: 0, dryRun: true };
@@ -622,7 +633,7 @@ export async function executeDeploy(
       }
 
       const scriptContent = readFileSync(deployScript, "utf-8");
-      const noTransaction = isNonTransactional(scriptContent);
+      const autoCommit = isAutoCommit(scriptContent);
       const scriptHash = computeScriptHash(deployScript);
 
       // Resolve lock_timeout for this script
@@ -634,7 +645,7 @@ export async function executeDeploy(
 
       // Determine transaction mode for psql
       // Sqitch does NOT pass --single-transaction by default.
-      const useSingleTransaction = !noTransaction && (options.mode === "all" || options.mode === "tag");
+      const useSingleTransaction = !autoCommit && (options.mode === "all" || options.mode === "tag");
 
       // Mark change as running in TUI
       progress.updateChange(change.name, "running");

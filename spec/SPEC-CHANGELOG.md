@@ -62,7 +62,7 @@ Round 4 expert review findings addressed (convergence check). Same four reviewer
 
 - SA003: clarified that `USING` clause presence always triggers SA003 regardless of the safe cast allowlist
 - SA001: confirmed it does NOT fire when a `DEFAULT` is present (that case is SA002/SA002b territory)
-- `sqlever.*` schema creation: clarified that the `sqlever` schema is created on first non-transactional deploy (not just expand/contract and batched DML)
+- `sqlever.*` schema creation: clarified that the `sqlever` schema is created on first auto-commit deploy (not just expand/contract and batched DML)
 - Version bumped to 0.6
 
 ## [SPEC 0.5] — 2026-03-20
@@ -91,7 +91,7 @@ Round 3 expert review findings addressed. Same four reviewers: PG internals expe
 
 - **`--mode all` is NOT a single transaction in Sqitch:** Sqitch's `_deploy_all` uses per-change transactions with explicit revert on failure, NOT a single wrapping transaction. Documented accurately. sqlever's true single-transaction `--mode all` is a sqlever improvement.
 
-- **`-- sqitch-no-transaction` does NOT exist in Sqitch:** No evidence found in Sqitch source. Changed to `-- sqlever:no-transaction` as a sqlever-only convention. SA020 reference updated.
+- **`-- sqitch-no-transaction` does NOT exist in Sqitch:** No evidence found in Sqitch source. Changed to `-- sqlever:auto-commit` as a sqlever-only convention (legacy `-- sqlever:no-transaction` also accepted). SA020 reference updated.
 
 - **Sqitch uses `LOCK TABLE changes IN EXCLUSIVE MODE`, not advisory locks:** Documented that sqlever's advisory lock approach is a sqlever improvement providing stronger coordination (spans full deploy session vs. per-transaction table lock).
 
@@ -105,7 +105,7 @@ Round 3 expert review findings addressed. Same four reviewers: PG internals expe
 
 - **Hybrid rule interface convention documented:** Hybrid rules check `context.db !== undefined` internally. Suppression filtering happens in analyzer entry point after rules return findings. Rules may produce multiple findings from one statement.
 
-- **`--mode all` + non-transactional partial state documented:** Non-transactional changes that committed before a later failure remain deployed. `sqlever status` reports partial state correctly.
+- **`--mode all` + auto-commit partial state documented:** Auto-commit changes that committed before a later failure remain deployed. `sqlever status` reports partial state correctly.
 
 - **`--strict` and `error_on_warn` relationship documented:** `--strict` is the CLI equivalent of `error_on_warn = true` in config.
 
@@ -131,7 +131,7 @@ Round 2 expert review findings addressed. Four reviewers: PG internals expert, S
 
 ### Critical fixes
 
-- **Advisory lock design resolved:** Resolved xact vs session lock contradiction. Use `pg_advisory_lock` (session-level) as default — only option that works across multi-transaction deploys (`--mode change`) and non-transactional changes. Lock key: `pg_advisory_lock(hashtext('sqlever_deploy_' || project_name))`. Require direct connections for deploy (not PgBouncer in transaction mode). Apply to revert/rebase/checkout too, not just deploy.
+- **Advisory lock design resolved:** Resolved xact vs session lock contradiction. Use `pg_advisory_lock` (session-level) as default — only option that works across multi-transaction deploys (`--mode change`) and auto-commit changes. Lock key: `pg_advisory_lock(hashtext('sqlever_deploy_' || project_name))`. Require direct connections for deploy (not PgBouncer in transaction mode). Apply to revert/rebase/checkout too, not just deploy.
 
 - **`now()` is STABLE, not VOLATILE:** Removed `now()` from SA002 volatile examples — `now()` returns transaction start time and is classified STABLE. Corrected Problem 1 example text. Correct volatile examples: `random()`, `gen_random_uuid()`, `clock_timestamp()`, `txid_current()`. Updated SA002 test fixtures accordingly.
 
@@ -149,11 +149,11 @@ Round 2 expert review findings addressed. Four reviewers: PG internals expert, S
 
 - **Hybrid rule classification introduced:** New `type: "hybrid"` for rules with both static and connected concerns. SA009 (static: NOT VALID detection; connected: index check), SA017 (static: fire on SET NOT NULL; connected: check for CHECK constraint), SA018 (static: fire on ADD PRIMARY KEY; connected: check for pre-existing index).
 
-- **`--mode all` + non-transactional behavior specified:** Non-transactional changes break the transaction (COMMIT before, execute, BEGIN after). Warning emitted when `--mode all` used with non-transactional changes.
+- **`--mode all` + auto-commit behavior specified:** Auto-commit changes break the transaction (COMMIT before, execute, BEGIN after). Warning emitted when `--mode all` used with auto-commit changes.
 
-- **Non-transactional write-ahead tracking:** Before executing non-transactional DDL, write "pending" record to `sqlever.pending_changes`. After success, update to "complete" and write sqitch tracking. On next deploy, check for pending non-transactional changes and verify state.
+- **Auto-commit write-ahead tracking:** Before executing auto-commit DDL, write "pending" record to `sqlever.pending_changes`. After success, update to "complete" and write sqitch tracking. On next deploy, check for pending auto-commit changes and verify state.
 
-- **`--no-transaction` is a script comment in Sqitch:** Fixed — Sqitch uses `-- sqitch-no-transaction` comment in deploy script first line. sqlever supports both the script comment (Sqitch compat) and plan file pragma.
+- **`--auto-commit` (was `--no-transaction`) is a script comment convention in sqlever:** Fixed — Sqitch uses `-- sqitch-no-transaction` comment in deploy script first line. sqlever uses `-- sqlever:auto-commit` as the preferred directive, with `-- sqlever:no-transaction` accepted for backward compatibility.
 
 - **Inline suppression scoping specified:** Unclosed block extends to EOF with warning, single-line comment attaches to preceding statement, comma-separated rule IDs supported, unknown rules produce warning, `all` not supported.
 
@@ -175,7 +175,7 @@ Round 2 expert review findings addressed. Four reviewers: PG internals expert, S
 
 - **idle_in_transaction_session_timeout:** Changed from 0 (unlimited) to configurable generous value (default 10 minutes).
 
-- **Non-transactional statement_timeout:** Separate configurable timeout (default 4 hours) for non-transactional DDL.
+- **Auto-commit statement_timeout:** Separate configurable timeout (default 4 hours) for auto-commit DDL.
 
 - **Lock retry for CI:** Added `--lock-retries N` with exponential backoff (default 0 = no retry).
 
@@ -201,7 +201,7 @@ Comprehensive update based on expert review from four specialists: PG internals 
 
 ### Critical fixes
 
-- **Non-transactional DDL support (C1):** Added `--no-transaction` flag to `sqlever add` and plan file pragma. Deploy data flow updated to execute non-transactional changes without `BEGIN`/`COMMIT` wrapper. Tracking updates happen in a separate transaction. Covers `CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, `ALTER TYPE ADD VALUE` (PG < 12), `REINDEX CONCURRENTLY`. Added SA020 rule to detect `CONCURRENTLY` inside transactional deploys.
+- **Auto-commit DDL support (C1):** Added `--auto-commit` flag to `sqlever add` and plan file pragma. Deploy data flow updated to execute auto-commit changes without `BEGIN`/`COMMIT` wrapper. Tracking updates happen in a separate transaction. Covers `CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, `ALTER TYPE ADD VALUE` (PG < 12), `REINDEX CONCURRENTLY`. Added SA020 rule to detect `CONCURRENTLY` inside transactional deploys.
 
 - **Advisory locks for deploy coordination (C2):** Deploy data flow now acquires `pg_advisory_xact_lock` (or `pg_advisory_lock`) before executing changes. Second concurrent deploy exits with code 4. Crash recovery: PG auto-releases advisory locks on disconnect. Added integration tests for concurrent deploy scenarios.
 
@@ -293,7 +293,7 @@ Comprehensive update based on expert review from four specialists: PG internals 
 - Registry schema creation specified (IF NOT EXISTS + advisory lock for concurrent first-deploy)
 - Added OPEN markers for: change ID algorithm, script_hash computation, search_path handling, logical replication + expand/contract, PGQ vs SKIP LOCKED queue design, comprehensive SA003 safe-cast list
 - Added `preprocess.ts` to architecture for psql metacommand handling
-- Test fixtures expanded: `reworked/`, `cross-project/`, `conflicts/`, `non-transactional/`
+- Test fixtures expanded: `reworked/`, `cross-project/`, `conflicts/`, `auto-commit/`
 - Dry-run mode: explicitly documented what it does and does NOT guarantee
 
 ## [SPEC 0.2] — 2026-03-20
