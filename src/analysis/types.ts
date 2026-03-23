@@ -17,32 +17,32 @@
  */
 export type PgNode = Record<string, unknown>;
 
+/** Shared empty object returned by node() for nullish inputs. */
+const EMPTY: Record<string, unknown> = Object.freeze({}) as Record<string, unknown>;
+
 /**
  * Narrow an unknown AST value to a record for property access.
  *
  * Usage in rules: `const alterStmt = node(stmt.AlterTableStmt)`
  * then access `alterStmt.objtype`, `alterStmt.cmds`, etc.
+ *
+ * Returns a frozen EMPTY sentinel for nullish inputs, avoiding
+ * a fresh allocation per call.
  */
 export function node(value: unknown): Record<string, unknown> {
-  return (value ?? {}) as Record<string, unknown>;
+  return (value ?? EMPTY) as Record<string, unknown>;
 }
 
 /**
  * Narrow an unknown AST value to an array of records.
  *
  * Usage in rules: `for (const cmd of nodes(alterStmt.cmds))`
- */
-export function nodes(value: unknown): Record<string, unknown>[] {
-  return (value ?? []) as Record<string, unknown>[];
-}
-
-/**
- * Extract a string leaf value from an AST node.
  *
- * Usage: `str(alterStmt.objtype)` returns the string value or "".
+ * Accepts a generic parameter to avoid double-casts in callers:
+ *   `nodes<StringNode>(items)` instead of `nodes(items) as unknown as StringNode[]`
  */
-export function str(value: unknown): string {
-  return typeof value === "string" ? value : "";
+export function nodes<T = Record<string, unknown>>(value: unknown): T[] {
+  return (value ?? []) as T[];
 }
 
 /**
@@ -53,20 +53,6 @@ export interface DefElem {
     defname?: string;
     arg?: PgNode;
     defaction?: number;
-    location?: number;
-  };
-}
-
-/**
- * A RangeVar node from the libpg-query AST.
- */
-export interface RangeVar {
-  RangeVar?: {
-    relname?: string;
-    schemaname?: string;
-    inh?: boolean;
-    relpersistence?: string;
-    alias?: PgNode;
     location?: number;
   };
 }

@@ -14,7 +14,8 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation, node, nodes } from "../types.js";
+import { offsetToLocation, node } from "../types.js";
+import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA016: Rule = {
   id: "SA016",
@@ -25,46 +26,31 @@ export const SA016: Rule = {
     const findings: Finding[] = [];
     const { ast, rawSql, filePath } = context;
 
-    if (!ast?.stmts) return findings;
+    forEachAlterTableCmd(ast, ({ cmd, alterStmt, stmtLocation }) => {
+      if (cmd.subtype !== "AT_AddConstraint") return;
 
-    for (const stmtEntry of ast.stmts) {
-      const stmt = stmtEntry.stmt;
-      if (!stmt?.AlterTableStmt) continue;
+      if (!node(cmd.def).Constraint) return;
+      const constraint = node(node(cmd.def).Constraint);
+      if (constraint.contype !== "CONSTR_CHECK") return;
 
-      const alterStmt = node(stmt.AlterTableStmt);
-      if (alterStmt.objtype !== "OBJECT_TABLE") continue;
+      // Check for NOT VALID: skip_validation = true means NOT VALID was used
+      const hasNotValid = constraint.skip_validation === true;
 
-      for (const cmdEntry of nodes(alterStmt.cmds)) {
-        const cmd = node(cmdEntry.AlterTableCmd);
-        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AddConstraint") continue;
+      if (!hasNotValid) {
+        const location = offsetToLocation(rawSql, stmtLocation, filePath);
+        const tableName = node(alterStmt.relation).relname ?? "unknown";
+        const constraintName = constraint.conname ?? "unnamed";
 
-        const constraint = node(node(cmd.def).Constraint);
-        if (!node(cmd.def).Constraint || constraint.contype !== "CONSTR_CHECK") continue;
-
-        // Check for NOT VALID: skip_validation = true means NOT VALID was used
-        const hasNotValid = constraint.skip_validation === true;
-
-        if (!hasNotValid) {
-          const location = offsetToLocation(
-            rawSql,
-            stmtEntry.stmt_location ?? 0,
-            filePath,
-          );
-
-          const tableName = node(alterStmt.relation).relname ?? "unknown";
-          const constraintName = constraint.conname ?? "unnamed";
-
-          findings.push({
-            ruleId: "SA016",
-            severity: "error",
-            message: `Adding CHECK constraint "${constraintName}" on table "${tableName}" without NOT VALID performs a full table scan under a heavy lock.`,
-            location,
-            suggestion:
-              "Use ADD CONSTRAINT ... NOT VALID, then VALIDATE CONSTRAINT in a separate statement (takes a weaker lock and does not block writes).",
-          });
-        }
+        findings.push({
+          ruleId: "SA016",
+          severity: "error",
+          message: `Adding CHECK constraint "${constraintName}" on table "${tableName}" without NOT VALID performs a full table scan under a heavy lock.`,
+          location,
+          suggestion:
+            "Use ADD CONSTRAINT ... NOT VALID, then VALIDATE CONSTRAINT in a separate statement (takes a weaker lock and does not block writes).",
+        });
       }
-    }
+    });
 
     return findings;
   },

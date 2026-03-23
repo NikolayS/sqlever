@@ -18,6 +18,7 @@
 
 import type { Rule, Finding, AnalysisContext, StringNode } from "../types.js";
 import { offsetToLocation, node, nodes } from "../types.js";
+import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA018: Rule = {
   id: "SA018",
@@ -28,53 +29,38 @@ export const SA018: Rule = {
     const findings: Finding[] = [];
     const { ast, rawSql, filePath } = context;
 
-    if (!ast?.stmts) return findings;
+    forEachAlterTableCmd(ast, ({ cmd, alterStmt, stmtLocation }) => {
+      if (cmd.subtype !== "AT_AddConstraint") return;
 
-    for (const stmtEntry of ast.stmts) {
-      const stmt = stmtEntry.stmt;
-      if (!stmt?.AlterTableStmt) continue;
+      if (!node(cmd.def).Constraint) return;
+      const constraint = node(node(cmd.def).Constraint);
+      if (constraint.contype !== "CONSTR_PRIMARY") return;
 
-      const alterStmt = node(stmt.AlterTableStmt);
-      if (alterStmt.objtype !== "OBJECT_TABLE") continue;
+      // If USING INDEX is specified, indexname will be set
+      if (constraint.indexname) return;
 
-      for (const cmdEntry of nodes(alterStmt.cmds)) {
-        const cmd = node(cmdEntry.AlterTableCmd);
-        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AddConstraint") continue;
+      const location = offsetToLocation(rawSql, stmtLocation, filePath);
+      const tableName = node(alterStmt.relation).relname ?? "unknown";
 
-        const constraint = node(node(cmd.def).Constraint);
-        if (!node(cmd.def).Constraint || constraint.contype !== "CONSTR_PRIMARY") continue;
+      // Extract PK column names
+      const pkCols = nodes<StringNode>(constraint.keys)
+        .map((key) => key?.String?.sval)
+        .filter(Boolean)
+        .join(", ");
 
-        // If USING INDEX is specified, indexname will be set
-        if (constraint.indexname) continue;
+      // Connected check: if DB is available, check for pre-existing
+      // unique index on PK columns and suppress if found
+      // This is left as a stub for the analysis engine integration
 
-        const location = offsetToLocation(
-          rawSql,
-          stmtEntry.stmt_location ?? 0,
-          filePath,
-        );
-
-        const tableName = node(alterStmt.relation).relname ?? "unknown";
-
-        // Extract PK column names
-        const pkCols = nodes(constraint.keys)
-          .map((key) => (key as unknown as StringNode)?.String?.sval)
-          .filter(Boolean)
-          .join(", ");
-
-        // Connected check: if DB is available, check for pre-existing
-        // unique index on PK columns and suppress if found
-        // This is left as a stub for the analysis engine integration
-
-        findings.push({
-          ruleId: "SA018",
-          severity: "warn",
-          message: `ADD PRIMARY KEY on "${tableName}" (${pkCols}) without USING INDEX holds AccessExclusiveLock while creating the index.`,
-          location,
-          suggestion:
-            "Create the unique index concurrently first, then use ALTER TABLE ... ADD CONSTRAINT ... PRIMARY KEY USING INDEX.",
-        });
-      }
-    }
+      findings.push({
+        ruleId: "SA018",
+        severity: "warn",
+        message: `ADD PRIMARY KEY on "${tableName}" (${pkCols}) without USING INDEX holds AccessExclusiveLock while creating the index.`,
+        location,
+        suggestion:
+          "Create the unique index concurrently first, then use ALTER TABLE ... ADD CONSTRAINT ... PRIMARY KEY USING INDEX.",
+      });
+    });
 
     return findings;
   },

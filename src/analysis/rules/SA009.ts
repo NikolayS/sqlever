@@ -20,6 +20,7 @@
 
 import type { Rule, Finding, AnalysisContext, StringNode } from "../types.js";
 import { offsetToLocation, node, nodes } from "../types.js";
+import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA009: Rule = {
   id: "SA009",
@@ -30,57 +31,42 @@ export const SA009: Rule = {
     const findings: Finding[] = [];
     const { ast, rawSql, filePath } = context;
 
-    if (!ast?.stmts) return findings;
+    forEachAlterTableCmd(ast, ({ cmd, alterStmt, stmtLocation }) => {
+      if (cmd.subtype !== "AT_AddConstraint") return;
 
-    for (const stmtEntry of ast.stmts) {
-      const stmt = stmtEntry.stmt;
-      if (!stmt?.AlterTableStmt) continue;
+      if (!node(cmd.def).Constraint) return;
+      const constraint = node(node(cmd.def).Constraint);
+      if (constraint.contype !== "CONSTR_FOREIGN") return;
 
-      const alterStmt = node(stmt.AlterTableStmt);
-      if (alterStmt.objtype !== "OBJECT_TABLE") continue;
+      // Check for NOT VALID: in the AST, skip_validation = true means NOT VALID was used
+      const hasNotValid = constraint.skip_validation === true;
 
-      for (const cmdEntry of nodes(alterStmt.cmds)) {
-        const cmd = node(cmdEntry.AlterTableCmd);
-        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AddConstraint") continue;
+      if (!hasNotValid) {
+        const location = offsetToLocation(rawSql, stmtLocation, filePath);
+        const tableName = node(alterStmt.relation).relname ?? "unknown";
+        const constraintName = constraint.conname ?? "unnamed";
+        const refTable = node(constraint.pktable).relname ?? "unknown";
 
-        const constraint = node(node(cmd.def).Constraint);
-        if (!node(cmd.def).Constraint || constraint.contype !== "CONSTR_FOREIGN") continue;
+        // Extract FK column names
+        const fkCols = nodes<StringNode>(constraint.fk_attrs)
+          .map((attr) => attr?.String?.sval)
+          .filter(Boolean)
+          .join(", ");
 
-        // Check for NOT VALID: in the AST, skip_validation = true means NOT VALID was used
-        const hasNotValid = constraint.skip_validation === true;
-
-        if (!hasNotValid) {
-          const location = offsetToLocation(
-            rawSql,
-            stmtEntry.stmt_location ?? 0,
-            filePath,
-          );
-
-          const tableName = node(alterStmt.relation).relname ?? "unknown";
-          const constraintName = constraint.conname ?? "unnamed";
-          const refTable = node(constraint.pktable).relname ?? "unknown";
-
-          // Extract FK column names
-          const fkCols = nodes(constraint.fk_attrs)
-            .map((attr) => (attr as unknown as StringNode)?.String?.sval)
-            .filter(Boolean)
-            .join(", ");
-
-          findings.push({
-            ruleId: "SA009",
-            severity: "warn",
-            message: `Adding foreign key "${constraintName}" on ${tableName}(${fkCols}) referencing ${refTable} without NOT VALID takes a ShareRowExclusiveLock and validates all existing rows.`,
-            location,
-            suggestion:
-              "Use ADD CONSTRAINT ... NOT VALID, then VALIDATE CONSTRAINT in a separate statement (takes only ShareUpdateExclusiveLock, does not block writes).",
-          });
-        }
-
-        // Connected check: index on referencing columns
-        // This would run when context.db is available
-        // Left as a stub for the analysis engine integration
+        findings.push({
+          ruleId: "SA009",
+          severity: "warn",
+          message: `Adding foreign key "${constraintName}" on ${tableName}(${fkCols}) referencing ${refTable} without NOT VALID takes a ShareRowExclusiveLock and validates all existing rows.`,
+          location,
+          suggestion:
+            "Use ADD CONSTRAINT ... NOT VALID, then VALIDATE CONSTRAINT in a separate statement (takes only ShareUpdateExclusiveLock, does not block writes).",
+        });
       }
-    }
+
+      // Connected check: index on referencing columns
+      // This would run when context.db is available
+      // Left as a stub for the analysis engine integration
+    });
 
     return findings;
   },

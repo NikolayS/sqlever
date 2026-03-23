@@ -18,8 +18,9 @@
  * to suppress the warning.
  */
 
-import type { Rule, Finding, AnalysisContext, StringNode, DefElem } from "../types.js";
+import type { Rule, Finding, AnalysisContext, DefElem } from "../types.js";
 import { offsetToLocation, node, nodes } from "../types.js";
+import { extractDropObjectNames } from "../ast-helpers.js";
 
 /**
  * Check if the SQL contains a -- sqlever:auto-commit or
@@ -81,17 +82,7 @@ export const SA020: Rule = {
             filePath,
           );
 
-          // Extract index name(s)
-          const indexNames: string[] = [];
-          for (const obj of nodes(dropStmt.objects)) {
-            const list = node(obj).List;
-            if (list) {
-              const names = nodes(node(list).items)
-                .map((item) => (item as unknown as StringNode)?.String?.sval)
-                .filter(Boolean);
-              indexNames.push(names.join("."));
-            }
-          }
+          const indexNames = extractDropObjectNames(dropStmt);
           const nameStr =
             indexNames.length > 0 ? indexNames.join(", ") : "unnamed";
 
@@ -109,7 +100,7 @@ export const SA020: Rule = {
       // REINDEX CONCURRENTLY
       if (stmt?.ReindexStmt) {
         const reindexStmt = node(stmt.ReindexStmt);
-        const params = nodes(reindexStmt.params) as unknown as DefElem[];
+        const params = nodes<DefElem>(reindexStmt.params);
         const hasConcurrently = params.some(
           (p) => p?.DefElem?.defname === "concurrently",
         );
