@@ -10,8 +10,8 @@
  * columns.
  */
 
-import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import type { Rule, Finding, AnalysisContext, DefElem } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA012: Rule = {
   id: "SA012",
@@ -28,12 +28,12 @@ export const SA012: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.AlterSeqStmt) continue;
 
-      const alterSeq = stmt.AlterSeqStmt;
-      const options = (alterSeq.options ?? []) as any[];
+      const alterSeq = node(stmt.AlterSeqStmt);
+      const options = nodes(alterSeq.options) as unknown as DefElem[];
 
       // Check if any option is "restart"
       const hasRestart = options.some(
-        (opt: any) => opt?.DefElem?.defname === "restart",
+        (opt) => opt?.DefElem?.defname === "restart",
       );
 
       if (!hasRestart) continue;
@@ -44,7 +44,7 @@ export const SA012: Rule = {
         filePath,
       );
 
-      const seqName = alterSeq.sequence?.relname ?? "unknown";
+      const seqName = node(alterSeq.sequence).relname ?? "unknown";
 
       findings.push({
         ruleId: "SA012",

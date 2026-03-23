@@ -10,7 +10,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 /**
  * Map lock mode number to human-readable name.
@@ -54,7 +54,7 @@ export const SA021: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.LockStmt) continue;
 
-      const lockStmt = stmt.LockStmt;
+      const lockStmt = node(stmt.LockStmt);
       const location = offsetToLocation(
         rawSql,
         stmtEntry.stmt_location ?? 0,
@@ -63,8 +63,8 @@ export const SA021: Rule = {
 
       // Extract table names
       const tableNames: string[] = [];
-      for (const rel of (lockStmt.relations ?? []) as any[]) {
-        const rv = rel?.RangeVar;
+      for (const rel of nodes(lockStmt.relations)) {
+        const rv = node(node(rel).RangeVar);
         if (rv?.relname) {
           const schema = rv.schemaname ? `${rv.schemaname}.` : "";
           tableNames.push(`${schema}${rv.relname}`);

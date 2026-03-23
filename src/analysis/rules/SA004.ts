@@ -10,7 +10,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node } from "../types.js";
 
 export const SA004: Rule = {
   id: "SA004",
@@ -27,7 +27,7 @@ export const SA004: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.IndexStmt) continue;
 
-      const indexStmt = stmt.IndexStmt;
+      const indexStmt = node(stmt.IndexStmt);
 
       // Skip if CONCURRENTLY is already used
       if (indexStmt.concurrent) continue;
@@ -39,7 +39,7 @@ export const SA004: Rule = {
       );
 
       const idxName = indexStmt.idxname ?? "unnamed";
-      const tableName = indexStmt.relation?.relname ?? "unknown";
+      const tableName = node(indexStmt.relation).relname ?? "unknown";
 
       findings.push({
         ruleId: "SA004",

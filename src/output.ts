@@ -104,7 +104,7 @@ export function table(
   for (const row of stringRows) {
     for (let i = 0; i < headers.length; i++) {
       const cell = row[i] ?? "";
-      if (cell.length > widths[i]) {
+      if (cell.length > (widths[i] ?? 0)) {
         widths[i] = cell.length;
       }
     }
@@ -113,7 +113,7 @@ export function table(
   const pad = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length));
 
   // Header line.
-  const headerLine = headers.map((h, i) => pad(h, widths[i])).join("  ");
+  const headerLine = headers.map((h, i) => pad(h, widths[i] ?? 0)).join("  ");
   process.stdout.write(headerLine + "\n");
 
   // Separator line.
@@ -122,7 +122,7 @@ export function table(
 
   // Data lines.
   for (const row of stringRows) {
-    const line = headers.map((_, i) => pad(row[i] ?? "", widths[i])).join("  ");
+    const line = headers.map((_, i) => pad(row[i] ?? "", widths[i] ?? 0)).join("  ");
     process.stdout.write(line + "\n");
   }
 }

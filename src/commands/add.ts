@@ -127,8 +127,9 @@ export function readPlanInfo(planPath: string): PlanInfo {
     if (trimmed.startsWith("%")) {
       const match = trimmed.match(/^%(\S+?)=(.*)$/);
       if (match) {
-        const [, key, value] = match;
-        if (key === "project") projectName = value!;
+        const key = match[1];
+        const value = match[2];
+        if (key === "project" && value !== undefined) projectName = value;
         if (key === "uri") projectUri = value;
       }
       continue;
@@ -174,7 +175,12 @@ function parseChangeLine(
   const match = line.match(depsRegex);
   if (!match) return null;
 
-  const [, name, depsStr, timestamp, plannerName, plannerEmail, note] = match;
+  const name = match[1] ?? "";
+  const depsStr = match[2];
+  const timestamp = match[3] ?? "";
+  const plannerName = match[4] ?? "";
+  const plannerEmail = match[5] ?? "";
+  const note = match[6] ?? "";
 
   const requires: string[] = [];
   const conflicts: string[] = [];
@@ -192,24 +198,24 @@ function parseChangeLine(
   const changeId = computeChangeId({
     project,
     uri,
-    change: name!,
+    change: name,
     parent,
-    planner_name: plannerName!,
-    planner_email: plannerEmail!,
-    planned_at: timestamp!,
+    planner_name: plannerName,
+    planner_email: plannerEmail,
+    planned_at: timestamp,
     requires,
     conflicts,
-    note: note ?? "",
+    note,
   });
 
   return {
     change_id: changeId,
-    name: name!,
+    name,
     project,
-    note: note ?? "",
-    planner_name: plannerName!,
-    planner_email: plannerEmail!,
-    planned_at: timestamp!,
+    note,
+    planner_name: plannerName,
+    planner_email: plannerEmail,
+    planned_at: timestamp,
     requires,
     conflicts,
     parent,

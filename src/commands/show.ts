@@ -227,12 +227,11 @@ export function runShow(
     (opts.type === "deploy" || opts.type === "revert" || opts.type === "verify") &&
     !/^[a-zA-Z_][a-zA-Z0-9_@.-]*$/.test(opts.name)
   ) {
-    error(
-      `Error: invalid change name '${opts.name}'. ` +
+    throw new Error(
+      `invalid change name '${opts.name}'. ` +
       "Names must start with a letter or underscore and contain only " +
       "letters, digits, underscores, hyphens, dots, and @.",
     );
-    process.exit(1);
   }
 
   // Load config if not provided

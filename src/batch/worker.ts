@@ -22,7 +22,7 @@
 //
 // Inspired by GitLab BatchedMigration framework.
 
-import type { DatabaseClient, QueryResult } from "../db/client";
+import type { DatabaseClient } from "../db/client";
 import type { BatchJob, PartitionId } from "./queue";
 import { BatchQueue } from "./queue";
 

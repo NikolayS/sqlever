@@ -15,7 +15,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 /**
  * Known volatile functions that cause table rewrites on all PG versions.
@@ -40,21 +40,23 @@ const VOLATILE_FUNCTIONS: ReadonlySet<string> = new Set([
 /**
  * Recursively check if an AST expression node contains a volatile function call.
  */
-function containsVolatileFunction(node: any): string | null {
-  if (!node || typeof node !== "object") return null;
+function containsVolatileFunction(n: unknown): string | null {
+  if (!n || typeof n !== "object") return null;
+  const nd = node(n);
 
   // Direct function call
-  if (node.FuncCall) {
-    const funcNames = node.FuncCall.funcname ?? [];
+  if (nd.FuncCall) {
+    const funcNode = node(nd.FuncCall);
+    const funcNames = nodes(funcNode.funcname);
     for (const fn of funcNames) {
-      const name = fn?.String?.sval?.toLowerCase();
-      if (name && VOLATILE_FUNCTIONS.has(name)) {
-        return name;
+      const name = (node(fn).String as Record<string, unknown> | undefined);
+      const sval = name ? String(node(name).sval ?? "").toLowerCase() : "";
+      if (sval && VOLATILE_FUNCTIONS.has(sval)) {
+        return sval;
       }
     }
     // Check function arguments recursively
-    const args = node.FuncCall.args ?? [];
-    for (const arg of args) {
+    for (const arg of nodes(funcNode.args)) {
       const result = containsVolatileFunction(arg);
       if (result) return result;
     }
@@ -62,20 +64,21 @@ function containsVolatileFunction(node: any): string | null {
   }
 
   // TypeCast wrapping a volatile function (e.g. random()::int)
-  if (node.TypeCast) {
-    return containsVolatileFunction(node.TypeCast.arg);
+  if (nd.TypeCast) {
+    return containsVolatileFunction(node(nd.TypeCast).arg);
   }
 
   // Check nested expressions
-  if (node.A_Expr) {
-    const left = containsVolatileFunction(node.A_Expr.lexpr);
+  if (nd.A_Expr) {
+    const expr = node(nd.A_Expr);
+    const left = containsVolatileFunction(expr.lexpr);
     if (left) return left;
-    return containsVolatileFunction(node.A_Expr.rexpr);
+    return containsVolatileFunction(expr.rexpr);
   }
 
   // CoalesceExpr
-  if (node.CoalesceExpr) {
-    for (const arg of node.CoalesceExpr.args ?? []) {
+  if (nd.CoalesceExpr) {
+    for (const arg of nodes(node(nd.CoalesceExpr).args)) {
       const result = containsVolatileFunction(arg);
       if (result) return result;
     }
@@ -99,21 +102,20 @@ export const SA002: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.AlterTableStmt) continue;
 
-      const alterStmt = stmt.AlterTableStmt;
+      const alterStmt = node(stmt.AlterTableStmt);
       if (alterStmt.objtype !== "OBJECT_TABLE") continue;
 
-      const cmds = alterStmt.cmds ?? [];
-      for (const cmdEntry of cmds) {
-        const cmd = cmdEntry.AlterTableCmd;
-        if (!cmd || cmd.subtype !== "AT_AddColumn") continue;
+      for (const cmdEntry of nodes(alterStmt.cmds)) {
+        const cmd = node(cmdEntry.AlterTableCmd);
+        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AddColumn") continue;
 
-        const colDef = cmd.def?.ColumnDef;
+        const colDef = node(cmd.def).ColumnDef;
         if (!colDef) continue;
+        const colDefNode = node(colDef);
 
-        const constraints = colDef.constraints ?? [];
-        for (const c of constraints) {
-          const constraint = c.Constraint;
-          if (!constraint || constraint.contype !== "CONSTR_DEFAULT") continue;
+        for (const c of nodes(colDefNode.constraints)) {
+          const constraint = node(c.Constraint);
+          if (!c.Constraint || constraint.contype !== "CONSTR_DEFAULT") continue;
 
           const rawExpr = constraint.raw_expr;
           if (!rawExpr) continue;
@@ -125,8 +127,8 @@ export const SA002: Rule = {
               stmtEntry.stmt_location ?? 0,
               filePath,
             );
-            const tableName = alterStmt.relation?.relname ?? "unknown";
-            const colName = colDef.colname ?? "unknown";
+            const tableName = node(alterStmt.relation).relname ?? "unknown";
+            const colName = colDefNode.colname ?? "unknown";
 
             findings.push({
               ruleId: "SA002",

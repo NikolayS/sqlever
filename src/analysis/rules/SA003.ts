@@ -20,8 +20,8 @@
  * - numeric(P,S) to unconstrained numeric (removing precision/scale)
  */
 
-import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation, displayTypeName } from "../types.js";
+import type { Rule, Finding, AnalysisContext, TypeName } from "../types.js";
+import { offsetToLocation, displayTypeName, node, nodes } from "../types.js";
 
 /**
  * Check if a type change is in the safe cast allowlist.
@@ -38,7 +38,7 @@ import { offsetToLocation, displayTypeName } from "../types.js";
  * same type family. Since we don't have the source type from the AST, we
  * must be conservative and flag all changes.
  */
-function isSafeCast(_targetTypeName: any): boolean {
+function isSafeCast(_targetTypeName: TypeName | Record<string, unknown> | undefined): boolean {
   // Without knowing the source type, we cannot determine if the cast is safe.
   // The analysis engine with DB connection can refine this.
   // For static analysis, we flag all type changes (conservative approach).
@@ -60,22 +60,22 @@ export const SA003: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.AlterTableStmt) continue;
 
-      const alterStmt = stmt.AlterTableStmt;
+      const alterStmt = node(stmt.AlterTableStmt);
       if (alterStmt.objtype !== "OBJECT_TABLE") continue;
 
-      const cmds = alterStmt.cmds ?? [];
-      for (const cmdEntry of cmds) {
-        const cmd = cmdEntry.AlterTableCmd;
-        if (!cmd || cmd.subtype !== "AT_AlterColumnType") continue;
+      for (const cmdEntry of nodes(alterStmt.cmds)) {
+        const cmd = node(cmdEntry.AlterTableCmd);
+        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AlterColumnType") continue;
 
-        const colDef = cmd.def?.ColumnDef;
+        const colDef = node(cmd.def).ColumnDef;
         if (!colDef) continue;
+        const colDefNode = node(colDef);
 
-        const hasUsing = !!colDef.raw_default;
-        const targetType = colDef.typeName;
-        const targetTypeDisplay = displayTypeName(targetType);
+        const hasUsing = !!colDefNode.raw_default;
+        const targetType = colDefNode.typeName;
+        const targetTypeDisplay = displayTypeName(targetType as TypeName | undefined);
         const colName = cmd.name ?? "unknown";
-        const tableName = alterStmt.relation?.relname ?? "unknown";
+        const tableName = node(alterStmt.relation).relname ?? "unknown";
 
         // USING clause always triggers — PG rewrites to evaluate the expression
         if (hasUsing) {
@@ -96,7 +96,7 @@ export const SA003: Rule = {
         }
 
         // Check safe cast allowlist (static mode: conservative)
-        if (!isSafeCast(targetType)) {
+        if (!isSafeCast(targetType as TypeName | undefined)) {
           const location = offsetToLocation(
             rawSql,
             stmtEntry.stmt_location ?? 0,

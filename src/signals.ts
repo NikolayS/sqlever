@@ -6,7 +6,6 @@ type CleanupFn = () => void | Promise<void>;
 export class ShutdownManager {
   private shuttingDown = false;
   private cleanupCallbacks: CleanupFn[] = [];
-  private signalReceived: "SIGINT" | "SIGTERM" | null = null;
   private quiet = false;
 
   /**
@@ -31,7 +30,6 @@ export class ShutdownManager {
       }
 
       this.shuttingDown = true;
-      this.signalReceived = signal;
 
       if (!this.quiet) {
         // Write directly to stderr to avoid buffering issues during shutdown

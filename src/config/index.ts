@@ -331,7 +331,6 @@ export function mergeConfs(confs: SqitchConf[]): SqitchConf {
   // 1. Start with base config, filtering out keys that are overridden by later configs
   // 2. Then append entries from later configs (also filtering earlier overrides)
   const merged: ConfEntry[] = [];
-  const addedFromLater = new Set<string>(); // track which keys we've already added from later confs
 
   // First, add entries from the base config that are NOT overridden
   for (const entry of confs[0]!.entries) {

@@ -205,7 +205,7 @@ function parseEntry(line: string, lineNum: number): ParsedEntry {
   // This correctly handles edge cases like planner_name being whitespace-only
   // (e.g. "   <email>" → planner_name = " ").
   const plannerMatch = afterTs.match(/^[ \t]*([^<]+)[ \t]+</);
-  const plannerName = plannerMatch ? plannerMatch[1] : afterTs.slice(0, emailStartIdx).trim();
+  const plannerName = plannerMatch?.[1] ?? afterTs.slice(0, emailStartIdx).trim();
 
   // Note is after the email closing >
   const afterEmail = afterTs.slice(emailEndIdx + 1);

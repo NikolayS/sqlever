@@ -20,7 +20,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA017: Rule = {
   id: "SA017",
@@ -37,16 +37,15 @@ export const SA017: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.AlterTableStmt) continue;
 
-      const alterStmt = stmt.AlterTableStmt;
+      const alterStmt = node(stmt.AlterTableStmt);
       if (alterStmt.objtype !== "OBJECT_TABLE") continue;
 
-      const cmds = alterStmt.cmds ?? [];
-      for (const cmdEntry of cmds) {
-        const cmd = cmdEntry.AlterTableCmd;
-        if (!cmd || cmd.subtype !== "AT_SetNotNull") continue;
+      for (const cmdEntry of nodes(alterStmt.cmds)) {
+        const cmd = node(cmdEntry.AlterTableCmd);
+        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_SetNotNull") continue;
 
         const colName = cmd.name ?? "unknown";
-        const tableName = alterStmt.relation?.relname ?? "unknown";
+        const tableName = node(alterStmt.relation).relname ?? "unknown";
 
         // Connected check: if DB is available, check for existing
         // CHECK (col IS NOT NULL) constraint and suppress if found

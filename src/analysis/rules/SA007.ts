@@ -10,8 +10,8 @@
  * mode, always fires.
  */
 
-import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import type { Rule, Finding, AnalysisContext, StringNode } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA007: Rule = {
   id: "SA007",
@@ -31,7 +31,7 @@ export const SA007: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.DropStmt) continue;
 
-      const dropStmt = stmt.DropStmt;
+      const dropStmt = node(stmt.DropStmt);
 
       // Only care about DROP TABLE
       if (dropStmt.removeType !== "OBJECT_TABLE") continue;
@@ -44,10 +44,11 @@ export const SA007: Rule = {
 
       // Extract table name(s) from the objects list
       const tableNames: string[] = [];
-      for (const obj of dropStmt.objects ?? []) {
-        if (obj?.List?.items) {
-          const names = obj.List.items
-            .map((item: any) => item?.String?.sval)
+      for (const obj of nodes(dropStmt.objects)) {
+        const list = node(obj).List;
+        if (list) {
+          const names = nodes(node(list).items)
+            .map((item) => (item as unknown as StringNode)?.String?.sval)
             .filter(Boolean);
           tableNames.push(names.join("."));
         }

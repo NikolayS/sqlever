@@ -18,8 +18,8 @@
  * to suppress the warning.
  */
 
-import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import type { Rule, Finding, AnalysisContext, StringNode, DefElem } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 /**
  * Check if the SQL contains a -- sqlever:auto-commit or
@@ -47,64 +47,71 @@ export const SA020: Rule = {
       const stmt = stmtEntry.stmt;
 
       // CREATE INDEX CONCURRENTLY
-      if (stmt?.IndexStmt?.concurrent) {
-        const indexStmt = stmt.IndexStmt;
-        const location = offsetToLocation(
-          rawSql,
-          stmtEntry.stmt_location ?? 0,
-          filePath,
-        );
-        const idxName = indexStmt.idxname ?? "unnamed";
+      if (stmt?.IndexStmt) {
+        const indexStmt = node(stmt.IndexStmt);
+        if (indexStmt.concurrent) {
+          const location = offsetToLocation(
+            rawSql,
+            stmtEntry.stmt_location ?? 0,
+            filePath,
+          );
+          const idxName = indexStmt.idxname ?? "unnamed";
 
-        findings.push({
-          ruleId: "SA020",
-          severity: "error",
-          message: `CREATE INDEX CONCURRENTLY "${idxName}" cannot run inside a transaction block.`,
-          location,
-          suggestion:
-            "Mark this migration as auto-commit, or add a -- sqlever:auto-commit comment. In sqitch, use an auto-commit (non-transactional) change.",
-        });
+          findings.push({
+            ruleId: "SA020",
+            severity: "error",
+            message: `CREATE INDEX CONCURRENTLY "${idxName}" cannot run inside a transaction block.`,
+            location,
+            suggestion:
+              "Mark this migration as auto-commit, or add a -- sqlever:auto-commit comment. In sqitch, use an auto-commit (non-transactional) change.",
+          });
+        }
       }
 
       // DROP INDEX CONCURRENTLY
-      if (
-        stmt?.DropStmt?.removeType === "OBJECT_INDEX" &&
-        stmt.DropStmt.concurrent
-      ) {
-        const location = offsetToLocation(
-          rawSql,
-          stmtEntry.stmt_location ?? 0,
-          filePath,
-        );
+      if (stmt?.DropStmt) {
+        const dropStmt = node(stmt.DropStmt);
+        if (
+          dropStmt.removeType === "OBJECT_INDEX" &&
+          dropStmt.concurrent
+        ) {
+          const location = offsetToLocation(
+            rawSql,
+            stmtEntry.stmt_location ?? 0,
+            filePath,
+          );
 
-        // Extract index name(s)
-        const indexNames: string[] = [];
-        for (const obj of stmt.DropStmt.objects ?? []) {
-          if (obj?.List?.items) {
-            const names = obj.List.items
-              .map((item: any) => item?.String?.sval)
-              .filter(Boolean);
-            indexNames.push(names.join("."));
+          // Extract index name(s)
+          const indexNames: string[] = [];
+          for (const obj of nodes(dropStmt.objects)) {
+            const list = node(obj).List;
+            if (list) {
+              const names = nodes(node(list).items)
+                .map((item) => (item as unknown as StringNode)?.String?.sval)
+                .filter(Boolean);
+              indexNames.push(names.join("."));
+            }
           }
-        }
-        const nameStr =
-          indexNames.length > 0 ? indexNames.join(", ") : "unnamed";
+          const nameStr =
+            indexNames.length > 0 ? indexNames.join(", ") : "unnamed";
 
-        findings.push({
-          ruleId: "SA020",
-          severity: "error",
-          message: `DROP INDEX CONCURRENTLY ${nameStr} cannot run inside a transaction block.`,
-          location,
-          suggestion:
-            "Mark this migration as auto-commit, or add a -- sqlever:auto-commit comment. In sqitch, use an auto-commit (non-transactional) change.",
-        });
+          findings.push({
+            ruleId: "SA020",
+            severity: "error",
+            message: `DROP INDEX CONCURRENTLY ${nameStr} cannot run inside a transaction block.`,
+            location,
+            suggestion:
+              "Mark this migration as auto-commit, or add a -- sqlever:auto-commit comment. In sqitch, use an auto-commit (non-transactional) change.",
+          });
+        }
       }
 
       // REINDEX CONCURRENTLY
       if (stmt?.ReindexStmt) {
-        const params = (stmt.ReindexStmt.params ?? []) as any[];
+        const reindexStmt = node(stmt.ReindexStmt);
+        const params = nodes(reindexStmt.params) as unknown as DefElem[];
         const hasConcurrently = params.some(
-          (p: any) => p?.DefElem?.defname === "concurrently",
+          (p) => p?.DefElem?.defname === "concurrently",
         );
 
         if (hasConcurrently) {
@@ -114,9 +121,8 @@ export const SA020: Rule = {
             filePath,
           );
 
-          const reindexStmt = stmt.ReindexStmt;
           const target =
-            reindexStmt.relation?.relname ?? reindexStmt.name ?? "unknown";
+            node(reindexStmt.relation).relname ?? reindexStmt.name ?? "unknown";
 
           findings.push({
             ruleId: "SA020",

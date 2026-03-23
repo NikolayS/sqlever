@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { loadConfig } from "../config/index";
 import { parsePlan } from "../plan/parser";
-import type { Change, Plan, Tag } from "../plan/types";
+import type { Plan } from "../plan/types";
 import { info, json as jsonOut } from "../output";
 import type { ParsedArgs } from "../cli";
 import { resolveTargetUri, withDatabase } from "./shared";
@@ -81,8 +81,8 @@ export interface DiffOptions {
  * Expected usage:
  *   sqlever diff [--from tag_a] [--to tag_b] [--format json]
  */
-export function parseDiffArgs(rest: string[]): Pick<DiffOptions, "fromTag" | "toTag" | "format"> {
-  const opts: Pick<DiffOptions, "fromTag" | "toTag" | "format"> = {};
+export function parseDiffArgs(rest: string[]): { fromTag?: string; toTag?: string; format?: "text" | "json" } {
+  const opts: { fromTag?: string; toTag?: string; format?: "text" | "json" } = {};
 
   let i = 0;
   while (i < rest.length) {

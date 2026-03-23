@@ -14,7 +14,7 @@
  */
 
 import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import { offsetToLocation, node } from "../types.js";
 
 export const SA010: Rule = {
   id: "SA010",
@@ -35,7 +35,7 @@ export const SA010: Rule = {
 
       // Check UPDATE without WHERE
       if (stmt?.UpdateStmt) {
-        const updateStmt = stmt.UpdateStmt;
+        const updateStmt = node(stmt.UpdateStmt);
         if (!updateStmt.whereClause) {
           const location = offsetToLocation(
             rawSql,
@@ -43,7 +43,7 @@ export const SA010: Rule = {
             filePath,
           );
 
-          const tableName = updateStmt.relation?.relname ?? "unknown";
+          const tableName = node(updateStmt.relation).relname ?? "unknown";
 
           findings.push({
             ruleId: "SA010",
@@ -58,7 +58,7 @@ export const SA010: Rule = {
 
       // Check DELETE without WHERE
       if (stmt?.DeleteStmt) {
-        const deleteStmt = stmt.DeleteStmt;
+        const deleteStmt = node(stmt.DeleteStmt);
         if (!deleteStmt.whereClause) {
           const location = offsetToLocation(
             rawSql,
@@ -66,7 +66,7 @@ export const SA010: Rule = {
             filePath,
           );
 
-          const tableName = deleteStmt.relation?.relname ?? "unknown";
+          const tableName = node(deleteStmt.relation).relname ?? "unknown";
 
           findings.push({
             ruleId: "SA010",

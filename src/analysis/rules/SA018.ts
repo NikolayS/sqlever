@@ -16,8 +16,8 @@
  * ALTER TABLE ... ADD CONSTRAINT ... PRIMARY KEY USING INDEX.
  */
 
-import type { Rule, Finding, AnalysisContext } from "../types.js";
-import { offsetToLocation } from "../types.js";
+import type { Rule, Finding, AnalysisContext, StringNode } from "../types.js";
+import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA018: Rule = {
   id: "SA018",
@@ -34,16 +34,15 @@ export const SA018: Rule = {
       const stmt = stmtEntry.stmt;
       if (!stmt?.AlterTableStmt) continue;
 
-      const alterStmt = stmt.AlterTableStmt;
+      const alterStmt = node(stmt.AlterTableStmt);
       if (alterStmt.objtype !== "OBJECT_TABLE") continue;
 
-      const cmds = alterStmt.cmds ?? [];
-      for (const cmdEntry of cmds) {
-        const cmd = cmdEntry.AlterTableCmd;
-        if (!cmd || cmd.subtype !== "AT_AddConstraint") continue;
+      for (const cmdEntry of nodes(alterStmt.cmds)) {
+        const cmd = node(cmdEntry.AlterTableCmd);
+        if (!cmdEntry.AlterTableCmd || cmd.subtype !== "AT_AddConstraint") continue;
 
-        const constraint = cmd.def?.Constraint;
-        if (!constraint || constraint.contype !== "CONSTR_PRIMARY") continue;
+        const constraint = node(node(cmd.def).Constraint);
+        if (!node(cmd.def).Constraint || constraint.contype !== "CONSTR_PRIMARY") continue;
 
         // If USING INDEX is specified, indexname will be set
         if (constraint.indexname) continue;
@@ -54,11 +53,11 @@ export const SA018: Rule = {
           filePath,
         );
 
-        const tableName = alterStmt.relation?.relname ?? "unknown";
+        const tableName = node(alterStmt.relation).relname ?? "unknown";
 
         // Extract PK column names
-        const pkCols = (constraint.keys ?? [])
-          .map((key: any) => key?.String?.sval)
+        const pkCols = nodes(constraint.keys)
+          .map((key) => (key as unknown as StringNode)?.String?.sval)
           .filter(Boolean)
           .join(", ");
 
