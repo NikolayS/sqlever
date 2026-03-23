@@ -7,14 +7,13 @@
 //
 // Implements SPEC R1 `tag` semantics, compatible with Sqitch plan format.
 
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadConfig, type MergedConfig } from "../config/index";
 import { computeTagId, type TagIdInput, type Tag } from "../plan/types";
 import { appendTag } from "../plan/writer";
-import { parsePlan } from "../plan/parser";
 import { info, verbose } from "../output";
 import { getPlannerIdentity, nowTimestamp } from "./add";
+import { loadPlan } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -122,18 +121,10 @@ export async function runTag(
   // Load config if not provided
   const cfg = config ?? loadConfig(opts.topDir, undefined, environment);
 
-  // Resolve plan file path
+  // Resolve plan file path and parse it
   const topDir = resolve(opts.topDir ?? cfg.core.top_dir);
   const planPath = resolve(topDir, cfg.core.plan_file);
-
-  // Ensure plan file exists
-  if (!existsSync(planPath)) {
-    throw new Error(`plan file not found at ${planPath}. Run 'sqlever init' first.`);
-  }
-
-  // Parse the plan file to get project info and the last change
-  const planContent = readFileSync(planPath, "utf-8");
-  const plan = parsePlan(planContent);
+  const plan = loadPlan(topDir, cfg);
 
   // Must have at least one change to tag
   if (plan.changes.length === 0) {

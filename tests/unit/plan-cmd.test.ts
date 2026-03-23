@@ -506,7 +506,7 @@ describe("sqlever plan (subprocess)", () => {
       join(tempDir, "nope.plan"),
     );
     expect(exitCode).toBe(1);
-    expect(stderr).toContain("cannot read plan file");
+    expect(stderr).toContain("plan file not found");
   });
 
   test("--quiet suppresses text output", async () => {

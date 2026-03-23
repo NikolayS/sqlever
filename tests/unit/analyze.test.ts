@@ -581,7 +581,7 @@ describe("error handling", () => {
           forceRules: [],
           planFile: join(TMP_DIR, "nonexistent.plan"),
         }),
-      ).rejects.toThrow("Plan file not found");
+      ).rejects.toThrow("plan file not found");
     } finally {
       restore();
     }

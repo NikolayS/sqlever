@@ -342,7 +342,7 @@ export async function runAdd(
 
   // Ensure plan file exists
   if (!existsSync(planPath)) {
-    throw new Error(`plan file not found at ${planPath}. Run 'sqlever init' first.`);
+    throw new Error(`plan file not found: ${planPath}`);
   }
 
   // Read existing plan to check for duplicates and get last change ID

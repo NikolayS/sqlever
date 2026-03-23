@@ -11,7 +11,6 @@ import type { ParsedArgs } from "../cli";
 import { loadConfig, type MergedConfig } from "../config/index";
 import { DatabaseClient } from "../db/client";
 import { Registry, type RecordDeployInput } from "../db/registry";
-import { parsePlan } from "../plan/parser";
 import { topologicalSort, filterPending, filterToTarget, validateDependencies } from "../plan/sort";
 import { computeScriptHashFromBytes } from "../plan/types";
 import type { Change, Plan, Tag } from "../plan/types";
@@ -25,6 +24,7 @@ import { DeployProgress, shouldUseTUI } from "../tui/deploy";
 import { parseDblabOptions, runDblabDeploy } from "./deploy-dblab";
 import { isExpandChange, isContractChange } from "../expand-contract/phase-filter";
 import { ExpandContractTracker } from "../expand-contract/tracker";
+import { loadPlan } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Exit codes (SPEC R6)
@@ -375,18 +375,17 @@ export async function executeDeploy(
   const topDir = resolve(options.projectDir);
   const deployDir = config.core.deploy_dir;
   const verifyDir = config.core.verify_dir;
-  const planFilePath = join(topDir, config.core.plan_file);
-
   // 1. Parse plan file (use preloaded plan when available)
   let plan: Plan;
   if (preloadedPlan) {
     plan = preloadedPlan;
   } else {
-    if (!existsSync(planFilePath)) {
-      return { deployed: 0, skipped: 0, dryRun: options.dryRun, error: `Plan file not found: ${planFilePath}` };
+    try {
+      plan = loadPlan(topDir, config);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { deployed: 0, skipped: 0, dryRun: options.dryRun, error: msg };
     }
-    const planContent = readFileSync(planFilePath, "utf-8");
-    plan = parsePlan(planContent);
   }
   const projectName = plan.project.name;
 
@@ -1066,13 +1065,13 @@ export async function runDeploy(args: ParsedArgs): Promise<number> {
   // Parse plan file once — reuse for DB session settings and executeDeploy
   const projectDir = resolve(options.projectDir);
   const config = loadConfig(options.projectDir);
-  const planFilePath = join(projectDir, config.core.plan_file);
   let plan: Plan | undefined;
   let projectName = "unknown";
-  if (existsSync(planFilePath)) {
-    const planContent = readFileSync(planFilePath, "utf-8");
-    plan = parsePlan(planContent);
+  try {
+    plan = loadPlan(projectDir, config);
     projectName = plan.project.name;
+  } catch {
+    // Plan file may not exist yet; continue with default project name
   }
 
   const db = new DatabaseClient(options.dbUri, {

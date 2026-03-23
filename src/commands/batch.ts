@@ -12,8 +12,9 @@
 // All subcommands support --format json for machine-readable output.
 
 import type { ParsedArgs } from "../cli";
-import type { BatchJob } from "../batch/queue";
+import type { BatchJob, BatchQueue } from "../batch/queue";
 import { info, json as jsonOut } from "../output";
+import { withDatabase } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Subcommand argument types
@@ -372,13 +373,13 @@ export async function runBatch(args: ParsedArgs): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Handlers — each connects to DB, calls queue, outputs result
+// Handlers — each connects to DB via withDatabase, calls queue, outputs result
 // ---------------------------------------------------------------------------
 
-async function getQueue() {
-  const { DatabaseClient } = await import("../db/client");
-  const { BatchQueue } = await import("../batch/queue");
-
+/**
+ * Resolve the batch database URI from environment variables.
+ */
+function resolveBatchDbUri(): string {
   const dbUri =
     process.env.SQLEVER_DB_URI ?? process.env.DATABASE_URL ?? "";
   if (!dbUri) {
@@ -386,16 +387,24 @@ async function getQueue() {
       "No database URI configured. Set SQLEVER_DB_URI or DATABASE_URL, or use --db-uri.",
     );
   }
+  return dbUri;
+}
 
-  const client = new DatabaseClient(dbUri, {
-    command: "batch",
+/**
+ * Run a callback with a connected BatchQueue, handling connect/disconnect
+ * via withDatabase from shared.ts.
+ */
+async function withQueue<T>(
+  fn: (queue: BatchQueue) => Promise<T>,
+): Promise<T> {
+  const dbUri = resolveBatchDbUri();
+  const { BatchQueue: BQ } = await import("../batch/queue");
+
+  return withDatabase(dbUri, { command: "batch" }, async (db) => {
+    const queue = new BQ(db);
+    await queue.ensureSchema();
+    return fn(queue);
   });
-  await client.connect();
-
-  const queue = new BatchQueue(client);
-  await queue.ensureSchema();
-
-  return { queue, client };
 }
 
 async function handleBatchAdd(
@@ -404,8 +413,7 @@ async function handleBatchAdd(
 ): Promise<void> {
   const addArgs = parseBatchAddArgs(rest);
 
-  const { queue, client } = await getQueue();
-  try {
+  await withQueue(async (queue) => {
     const job = await queue.createJob({
       name: addArgs.name,
       tableName: addArgs.table,
@@ -420,9 +428,7 @@ async function handleBatchAdd(
       info(`Batch job '${job.name}' created.`);
       info(formatJobText(job));
     }
-  } finally {
-    await client.disconnect();
-  }
+  });
 }
 
 async function handleBatchList(
@@ -442,8 +448,7 @@ async function handleBatchList(
     throw new Error(`Unexpected argument: ${arg}`);
   }
 
-  const { queue, client } = await getQueue();
-  try {
+  await withQueue(async (queue) => {
     const jobs = await queue.listJobs();
 
     if (format === "json") {
@@ -451,9 +456,7 @@ async function handleBatchList(
     } else {
       info(formatJobListText(jobs));
     }
-  } finally {
-    await client.disconnect();
-  }
+  });
 }
 
 async function handleBatchStatus(
@@ -462,8 +465,7 @@ async function handleBatchStatus(
 ): Promise<void> {
   const nameArgs = parseBatchNameArgs(rest);
 
-  const { queue, client } = await getQueue();
-  try {
+  await withQueue(async (queue) => {
     const job = await queue.getJobByName(nameArgs.name);
     if (!job) {
       throw new Error(`Batch job '${nameArgs.name}' not found.`);
@@ -474,9 +476,7 @@ async function handleBatchStatus(
     } else {
       info(formatJobText(job));
     }
-  } finally {
-    await client.disconnect();
-  }
+  });
 }
 
 async function handleBatchPause(
@@ -485,8 +485,7 @@ async function handleBatchPause(
 ): Promise<void> {
   const nameArgs = parseBatchNameArgs(rest);
 
-  const { queue, client } = await getQueue();
-  try {
+  await withQueue(async (queue) => {
     const job = await queue.getJobByName(nameArgs.name);
     if (!job) {
       throw new Error(`Batch job '${nameArgs.name}' not found.`);
@@ -499,9 +498,7 @@ async function handleBatchPause(
     } else {
       info(`Batch job '${updated.name}' paused.`);
     }
-  } finally {
-    await client.disconnect();
-  }
+  });
 }
 
 async function handleBatchResume(
@@ -510,8 +507,7 @@ async function handleBatchResume(
 ): Promise<void> {
   const nameArgs = parseBatchNameArgs(rest);
 
-  const { queue, client } = await getQueue();
-  try {
+  await withQueue(async (queue) => {
     const job = await queue.getJobByName(nameArgs.name);
     if (!job) {
       throw new Error(`Batch job '${nameArgs.name}' not found.`);
@@ -524,9 +520,7 @@ async function handleBatchResume(
     } else {
       info(`Batch job '${updated.name}' resumed.`);
     }
-  } finally {
-    await client.disconnect();
-  }
+  });
 }
 
 async function handleBatchCancel(
@@ -535,8 +529,7 @@ async function handleBatchCancel(
 ): Promise<void> {
   const nameArgs = parseBatchNameArgs(rest);
 
-  const { queue, client } = await getQueue();
-  try {
+  await withQueue(async (queue) => {
     const job = await queue.getJobByName(nameArgs.name);
     if (!job) {
       throw new Error(`Batch job '${nameArgs.name}' not found.`);
@@ -549,9 +542,7 @@ async function handleBatchCancel(
     } else {
       info(`Batch job '${updated.name}' cancelled.`);
     }
-  } finally {
-    await client.disconnect();
-  }
+  });
 }
 
 async function handleBatchRetry(
@@ -560,8 +551,7 @@ async function handleBatchRetry(
 ): Promise<void> {
   const nameArgs = parseBatchNameArgs(rest);
 
-  const { queue, client } = await getQueue();
-  try {
+  await withQueue(async (queue) => {
     const job = await queue.getJobByName(nameArgs.name);
     if (!job) {
       throw new Error(`Batch job '${nameArgs.name}' not found.`);
@@ -574,7 +564,5 @@ async function handleBatchRetry(
     } else {
       info(`Batch job '${updated.name}' retried (now running).`);
     }
-  } finally {
-    await client.disconnect();
-  }
+  });
 }

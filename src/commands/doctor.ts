@@ -122,7 +122,7 @@ function checkPlanParsing(planPath: string): CheckResult & { plan?: Plan } {
     return {
       check: "plan-file",
       severity: "error",
-      message: `Plan file not found: ${planPath}`,
+      message: `plan file not found: ${planPath}`,
     };
   }
 
@@ -132,7 +132,7 @@ function checkPlanParsing(planPath: string): CheckResult & { plan?: Plan } {
     return {
       check: "plan-file",
       severity: "ok",
-      message: `Plan file parsed successfully: ${plan.changes.length} change(s), ${plan.tags.length} tag(s).`,
+      message: `plan file parsed successfully: ${plan.changes.length} change(s), ${plan.tags.length} tag(s).`,
       plan,
     };
   } catch (err) {
@@ -142,7 +142,7 @@ function checkPlanParsing(planPath: string): CheckResult & { plan?: Plan } {
     return {
       check: "plan-file",
       severity: "error",
-      message: `Plan file parse error: ${msg}`,
+      message: `plan file parse error: ${msg}`,
     };
   }
 }
