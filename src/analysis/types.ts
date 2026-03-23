@@ -224,24 +224,55 @@ export interface AnalyzeOptions {
 // ---------------------------------------------------------------------------
 
 /**
+ * Precomputed line-start offsets for offsetToLocation. Cached for the
+ * last-seen rawSql string so that repeated calls within the same file
+ * (typical during analysis) use an O(log N) binary search instead of
+ * an O(N) linear scan per call.
+ */
+let cachedLineStartsSql: string | undefined;
+let cachedLineStarts: number[] = [];
+
+function getLineStarts(rawSql: string): number[] {
+  if (rawSql === cachedLineStartsSql) return cachedLineStarts;
+  const starts = [0]; // line 1 starts at offset 0
+  for (let i = 0; i < rawSql.length; i++) {
+    if (rawSql[i] === "\n") {
+      starts.push(i + 1);
+    }
+  }
+  cachedLineStartsSql = rawSql;
+  cachedLineStarts = starts;
+  return starts;
+}
+
+/**
  * Convert a byte offset in the source SQL to a 1-based line and column.
+ *
+ * Uses a precomputed line-start index with binary search for O(log N)
+ * per call instead of O(N).
  */
 export function offsetToLocation(
   rawSql: string,
   byteOffset: number,
   filePath: string,
 ): Location {
-  let line = 1;
-  let col = 1;
-  const len = Math.min(byteOffset, rawSql.length);
-  for (let i = 0; i < len; i++) {
-    if (rawSql[i] === "\n") {
-      line++;
-      col = 1;
+  const starts = getLineStarts(rawSql);
+  const offset = Math.min(byteOffset, rawSql.length);
+
+  // Binary search for the line containing this offset
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >>> 1;
+    if (starts[mid]! <= offset) {
+      lo = mid;
     } else {
-      col++;
+      hi = mid - 1;
     }
   }
+
+  const line = lo + 1; // 1-based
+  const col = offset - starts[lo]! + 1; // 1-based
   return { file: filePath, line, column: col };
 }
 

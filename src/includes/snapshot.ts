@@ -54,8 +54,15 @@ export interface IncludeDirective {
 }
 
 // ---------------------------------------------------------------------------
-// Constants
+// Constants and caches
 // ---------------------------------------------------------------------------
+
+/**
+ * Cache for findCommitByTimestamp results. Maps "timestamp\0repoRoot" to
+ * the resolved commit hash. Avoids spawning a git subprocess for every
+ * change when many share the same planned_at timestamp.
+ */
+const commitByTimestampCache = new Map<string, string | undefined>();
 
 /** Default maximum include nesting depth. */
 const DEFAULT_MAX_DEPTH = 64;
@@ -238,12 +245,19 @@ export function findCommitByTimestamp(
   timestamp: string,
   repoRoot: string,
 ): string | undefined {
+  const cacheKey = `${timestamp}\0${repoRoot}`;
+  if (commitByTimestampCache.has(cacheKey)) {
+    return commitByTimestampCache.get(cacheKey);
+  }
+
   // --before accepts ISO 8601; -1 limits to one result; %H = full hash
   const result = gitExec(
     ["log", "--format=%H", "-1", `--before=${timestamp}`],
     repoRoot,
   );
-  return result?.trim() || undefined;
+  const commit = result?.trim() || undefined;
+  commitByTimestampCache.set(cacheKey, commit);
+  return commit;
 }
 
 /**
@@ -453,12 +467,14 @@ export function resolveDeployIncludes(
   repoRoot: string,
   commitHash?: string,
   noSnapshot?: boolean,
+  /** Pre-read script content — avoids a redundant readFileSync when the caller already has it. */
+  scriptContent?: string,
 ): ResolvedScript | undefined {
   const absoluteRoot = resolve(repoRoot);
 
-  // Read the script content to check for includes first
-  const scriptContent = readFileSync(deployScriptPath, "utf-8");
-  const directives = findIncludes(scriptContent);
+  // Use pre-read content when available, otherwise read from disk
+  const content = scriptContent ?? readFileSync(deployScriptPath, "utf-8");
+  const directives = findIncludes(content);
 
   if (directives.length === 0) {
     return undefined; // No includes — execute the original script
