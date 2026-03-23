@@ -32,6 +32,7 @@ import {
   type ReviewOptions,
   type LLMProvider,
 } from "../ai/review";
+import { resolveFromPlan, resolveChangedFiles } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -141,7 +142,7 @@ export function parseReviewArgs(rest: string[]): ReviewCommandOptions {
 }
 
 // ---------------------------------------------------------------------------
-// File resolution (shared logic with analyze)
+// File resolution
 // ---------------------------------------------------------------------------
 
 /**
@@ -175,71 +176,7 @@ function resolveExplicitTargets(targets: string[]): string[] {
   return files;
 }
 
-/**
- * Get migration file paths from sqitch.plan.
- */
-function resolveFromPlan(planPath: string, deployDir: string): string[] {
-  if (!existsSync(planPath)) {
-    throw new Error(`Plan file not found: ${planPath}`);
-  }
-
-  const { parsePlan } = require("../plan/parser") as typeof import("../plan/parser");
-  const planContent = readFileSync(planPath, "utf-8");
-  const plan = parsePlan(planContent);
-
-  const files: string[] = [];
-  for (const change of plan.changes) {
-    const deployFile = join(deployDir, `${change.name}.sql`);
-    if (existsSync(deployFile)) {
-      files.push(resolve(deployFile));
-    }
-  }
-
-  return files;
-}
-
-/**
- * Get files changed in git diff. Only returns .sql files.
- */
-function resolveChangedFiles(): string[] {
-  try {
-    const proc = Bun.spawnSync(["git", "diff", "--name-only", "HEAD"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const diffOutput = proc.stdout.toString().trim();
-
-    const stagedProc = Bun.spawnSync(
-      ["git", "diff", "--name-only", "--cached"],
-      { stdout: "pipe", stderr: "pipe" },
-    );
-    const stagedOutput = stagedProc.stdout.toString().trim();
-
-    const untrackedProc = Bun.spawnSync(
-      ["git", "ls-files", "--others", "--exclude-standard"],
-      { stdout: "pipe", stderr: "pipe" },
-    );
-    const untrackedOutput = untrackedProc.stdout.toString().trim();
-
-    const allFiles = new Set<string>();
-    for (const output of [diffOutput, stagedOutput, untrackedOutput]) {
-      if (output) {
-        for (const f of output.split("\n")) {
-          if (f.endsWith(".sql")) {
-            const abs = resolve(f);
-            if (existsSync(abs)) {
-              allFiles.add(abs);
-            }
-          }
-        }
-      }
-    }
-
-    return Array.from(allFiles).sort();
-  } catch {
-    throw new Error("Failed to determine changed files from git");
-  }
-}
+// resolveFromPlan and resolveChangedFiles moved to shared.ts
 
 // ---------------------------------------------------------------------------
 // Core review command
@@ -277,7 +214,7 @@ export async function runReviewCommand(
 
     if (!existsSync(planFile)) {
       if (opts.planFile) {
-        throw new Error(`Plan file not found: ${planFile}`);
+        throw new Error(`plan file not found: ${planFile}`);
       }
       // No plan file and no explicit targets — empty review
       const emptyResult: ReviewResult = {

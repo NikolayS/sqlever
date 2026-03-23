@@ -218,7 +218,7 @@ export async function runRework(
 
   // Ensure plan file exists
   if (!existsSync(planPath)) {
-    throw new Error(`plan file not found at ${planPath}. Run 'sqlever init' first.`);
+    throw new Error(`plan file not found: ${planPath}`);
   }
 
   // Read and analyze the plan

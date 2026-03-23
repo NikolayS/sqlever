@@ -20,7 +20,7 @@
 //
 // Implements S5-5 (GitHub issue #54).
 
-import { existsSync, readFileSync, statSync, readdirSync } from "node:fs";
+import { existsSync, statSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Analyzer } from "../analysis/index";
 import { defaultRegistry } from "../analysis/registry";
@@ -33,6 +33,7 @@ import {
   type Finding,
 } from "../analysis/reporter";
 import type { AnalysisConfig } from "../analysis/types";
+import { resolveFromPlan, resolveChangedFiles } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -188,80 +189,7 @@ function resolveExplicitTargets(targets: string[]): string[] {
   return files;
 }
 
-/**
- * Get migration file paths from sqitch.plan.
- *
- * Without a database connection we cannot determine deployment state,
- * so all change deploy scripts are returned.
- */
-function resolveFromPlan(
-  planPath: string,
-  deployDir: string,
-): string[] {
-  if (!existsSync(planPath)) {
-    throw new Error(`Plan file not found: ${planPath}`);
-  }
-
-  const { parsePlan } = require("../plan/parser") as typeof import("../plan/parser");
-  const planContent = readFileSync(planPath, "utf-8");
-  const plan = parsePlan(planContent);
-
-  const files: string[] = [];
-  for (const change of plan.changes) {
-    const deployFile = join(deployDir, `${change.name}.sql`);
-    if (existsSync(deployFile)) {
-      files.push(resolve(deployFile));
-    }
-  }
-
-  return files;
-}
-
-/**
- * Get files changed in git diff (unstaged + staged vs HEAD).
- * Only returns .sql files.
- */
-function resolveChangedFiles(): string[] {
-  try {
-    const proc = Bun.spawnSync(["git", "diff", "--name-only", "HEAD"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const diffOutput = proc.stdout.toString().trim();
-
-    // Also include staged files
-    const stagedProc = Bun.spawnSync(
-      ["git", "diff", "--name-only", "--cached"],
-      { stdout: "pipe", stderr: "pipe" },
-    );
-    const stagedOutput = stagedProc.stdout.toString().trim();
-
-    // Also include untracked files
-    const untrackedProc = Bun.spawnSync(
-      ["git", "ls-files", "--others", "--exclude-standard"],
-      { stdout: "pipe", stderr: "pipe" },
-    );
-    const untrackedOutput = untrackedProc.stdout.toString().trim();
-
-    const allFiles = new Set<string>();
-    for (const output of [diffOutput, stagedOutput, untrackedOutput]) {
-      if (output) {
-        for (const f of output.split("\n")) {
-          if (f.endsWith(".sql")) {
-            const abs = resolve(f);
-            if (existsSync(abs)) {
-              allFiles.add(abs);
-            }
-          }
-        }
-      }
-    }
-
-    return Array.from(allFiles).sort();
-  } catch {
-    throw new Error("Failed to determine changed files from git");
-  }
-}
+// resolveFromPlan and resolveChangedFiles moved to shared.ts
 
 // ---------------------------------------------------------------------------
 // Core analysis
@@ -301,7 +229,7 @@ export async function runAnalyze(opts: AnalyzeOptions): Promise<AnalyzeResult> {
     if (!existsSync(planFile)) {
       if (opts.planFile) {
         // Explicitly specified plan file — throw if not found
-        throw new Error(`Plan file not found: ${planFile}`);
+        throw new Error(`plan file not found: ${planFile}`);
       }
       // No plan file and no explicit targets — nothing to analyze
       return { findings: [], filesAnalyzed: 0, exitCode: 0 };

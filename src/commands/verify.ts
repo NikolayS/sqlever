@@ -11,17 +11,16 @@
 //   - Skip gracefully if verify script is missing
 
 import { resolve, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import type { ParsedArgs } from "../cli";
 import { loadConfig } from "../config/index";
-import { parsePlan } from "../plan/parser";
 import {
   Registry,
   type Change as RegistryChange,
 } from "../db/registry";
 import { PsqlRunner, type PsqlRunResult } from "../psql";
 import { info, verbose } from "../output";
-import { resolveTargetUri, withDatabase } from "./shared";
+import { resolveTargetUri, withDatabase, loadPlan } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Exit codes (SPEC R6)
@@ -303,12 +302,7 @@ export async function runVerify(
   const config = loadConfig(topDir);
 
   // Load plan file
-  const planFilePath = options.planFile
-    ? resolve(options.planFile)
-    : join(topDir, config.core.plan_file);
-
-  const planContent = readFileSync(planFilePath, "utf-8");
-  const plan = parsePlan(planContent);
+  const plan = loadPlan(topDir, config, options.planFile);
 
   // Resolve target URI
   const targetUri = resolveTargetUri(config, options.dbUri, options.target);

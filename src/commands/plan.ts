@@ -256,7 +256,7 @@ export function runPlan(args: ParsedArgs): void {
   try {
     content = readFileSync(opts.planFile, "utf-8");
   } catch {
-    throw new Error(`cannot read plan file: ${opts.planFile}`);
+    throw new Error(`plan file not found: ${opts.planFile}`);
   }
 
   let plan: Plan;

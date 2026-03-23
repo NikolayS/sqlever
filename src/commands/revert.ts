@@ -15,7 +15,6 @@ import { resolve, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import type { ParsedArgs } from "../cli";
 import { loadConfig } from "../config/index";
-import { parsePlan } from "../plan/parser";
 import type { Plan, Change as PlanChange } from "../plan/types";
 import { DatabaseClient } from "../db/client";
 import {
@@ -27,7 +26,7 @@ import {
 import { PsqlRunner, type PsqlRunResult } from "../psql";
 import { ShutdownManager } from "../signals";
 import { info, error as logError, verbose } from "../output";
-import { resolveTargetUri } from "./shared";
+import { resolveTargetUri, loadPlan } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Exit codes (SPEC R6)
@@ -266,17 +265,12 @@ export async function runRevert(
   const config = loadConfig(topDir);
 
   // Load plan file
-  const planFilePath = options.planFile
-    ? resolve(options.planFile)
-    : join(topDir, config.core.plan_file);
-
   let plan: Plan;
   try {
-    const planContent = readFileSync(planFilePath, "utf-8");
-    plan = parsePlan(planContent);
+    plan = loadPlan(topDir, config, options.planFile);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    logError(`Failed to read plan file: ${msg}`);
+    logError(msg);
     return 1;
   }
 

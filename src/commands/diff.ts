@@ -8,14 +8,12 @@
 //
 // Implements GitHub issue #85.
 
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { loadConfig } from "../config/index";
-import { parsePlan } from "../plan/parser";
 import type { Plan } from "../plan/types";
 import { info, json as jsonOut } from "../output";
 import type { ParsedArgs } from "../cli";
-import { resolveTargetUri, withDatabase } from "./shared";
+import { resolveTargetUri, withDatabase, loadPlan } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -299,16 +297,7 @@ export async function runDiff(args: ParsedArgs): Promise<void> {
   const config = loadConfig(topDir);
 
   // Read the plan file
-  const planFilePath = args.planFile
-    ? resolve(args.planFile)
-    : join(topDir, config.core.plan_file);
-
-  if (!existsSync(planFilePath)) {
-    throw new Error(`plan file not found: ${planFilePath}. Run 'sqlever init' to initialize a project.`);
-  }
-
-  const planContent = readFileSync(planFilePath, "utf-8");
-  const plan = parsePlan(planContent);
+  const plan = loadPlan(topDir, config, args.planFile);
 
   // Validate tag arguments
   if (diffOpts.fromTag && !diffOpts.toTag) {

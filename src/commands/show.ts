@@ -275,7 +275,7 @@ export function runShow(
   // Metadata types: change, tag
   if (opts.type === "change") {
     if (!existsSync(planPath)) {
-      throw new Error(`plan file not found at ${planPath}`);
+      throw new Error(`plan file not found: ${planPath}`);
     }
 
     const change = findChange(planPath, opts.name);
@@ -293,7 +293,7 @@ export function runShow(
 
   if (opts.type === "tag") {
     if (!existsSync(planPath)) {
-      throw new Error(`plan file not found at ${planPath}`);
+      throw new Error(`plan file not found: ${planPath}`);
     }
 
     const tag = findTag(planPath, opts.name);

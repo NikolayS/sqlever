@@ -342,7 +342,7 @@ describe("deploy", () => {
       const options = defaultOptions(testDir);
       const result = await executeDeploy(options, deps);
 
-      expect(result.error).toContain("Plan file not found");
+      expect(result.error).toContain("plan file not found");
       expect(result.deployed).toBe(0);
     });
 
