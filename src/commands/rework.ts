@@ -198,6 +198,16 @@ export async function runRework(
     process.exit(1);
   }
 
+  // Validate change name format (same rules as `add` — prevents path traversal)
+  if (!/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(opts.name)) {
+    error(
+      `Error: invalid change name '${opts.name}'. ` +
+      "Names must start with a letter or underscore and contain only " +
+      "letters, digits, underscores, and hyphens.",
+    );
+    process.exit(1);
+  }
+
   // Load config if not provided
   const cfg = config ?? loadConfig(opts.topDir, undefined, environment);
 

@@ -182,10 +182,25 @@ export class DatabaseClient {
 
     const appName = `sqlever/${command}/${project}`;
 
-    // Use a single SET command batch for efficiency. Each SET is a
-    // separate statement because PostgreSQL doesn't support multi-SET.
-    // Numeric timeouts are safe to interpolate (they are validated ints),
-    // but application_name is user-controlled text, so we use
+    // SECURITY: Validate that all timeout values are safe non-negative
+    // integers before interpolating them into SQL. This prevents SQL
+    // injection if a caller ever passes a non-numeric value.
+    const timeouts = [
+      { name: "statement_timeout", value: statementTimeout },
+      { name: "lock_timeout", value: lockTimeout },
+      { name: "idle_in_transaction_session_timeout", value: idleInTransactionSessionTimeout },
+    ];
+
+    for (const { name, value } of timeouts) {
+      if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
+        throw new Error(
+          `Invalid session setting: ${name} must be a non-negative integer, got ${value}`,
+        );
+      }
+    }
+
+    // Numeric timeouts are validated ints above, safe to interpolate.
+    // application_name is user-controlled text, so we use
     // set_config() with a parameterized query to avoid SQL injection.
     const statements = [
       `SET statement_timeout = ${statementTimeout}`,

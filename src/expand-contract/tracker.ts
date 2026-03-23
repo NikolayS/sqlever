@@ -438,32 +438,31 @@ export class ExpandContractTracker {
    * Compares the total row count against the count of rows where the
    * new column is NOT NULL (i.e., has been backfilled).
    *
+   * SECURITY: Identifiers (schema, table, column) are escaped via
+   * escapeIdentifier() which double-quotes and escapes embedded quotes.
+   * The source_filter field is intentionally ignored — it previously
+   * allowed raw SQL injection. Callers that need filtered backfill
+   * checks should implement the filtering in their own migration SQL.
+   *
    * @param input - Table and column information
    * @returns Backfill status with counts and completion flag
    */
   async checkBackfill(input: BackfillCheckInput): Promise<BackfillStatus> {
-    // We use quote_ident() on the server side to safely handle identifiers,
-    // but since we're building a dynamic query client-side, we validate
-    // identifiers here and use them directly. This is safe because
-    // identifiers are constrained to valid PostgreSQL names.
     const schema = this.escapeIdentifier(input.table_schema);
     const table = this.escapeIdentifier(input.table_name);
     const column = this.escapeIdentifier(input.new_column);
 
-    // Count total rows (optionally filtered by source)
-    let totalSql = `SELECT COUNT(*)::int AS cnt FROM ${schema}.${table}`;
-    if (input.source_filter) {
-      totalSql += ` WHERE ${input.source_filter}`;
-    }
+    // SECURITY: source_filter is not used — it was a raw SQL injection
+    // vector. All queries use only escaped identifiers.
+
+    // Count total rows
+    const totalSql = `SELECT COUNT(*)::int AS cnt FROM ${schema}.${table}`;
 
     const totalResult = await this.db.query<{ cnt: number }>(totalSql);
     const total_rows = totalResult.rows[0]?.cnt ?? 0;
 
     // Count backfilled rows (new column IS NOT NULL)
-    let backfilledSql = `SELECT COUNT(*)::int AS cnt FROM ${schema}.${table} WHERE ${column} IS NOT NULL`;
-    if (input.source_filter) {
-      backfilledSql += ` AND ${input.source_filter}`;
-    }
+    const backfilledSql = `SELECT COUNT(*)::int AS cnt FROM ${schema}.${table} WHERE ${column} IS NOT NULL`;
 
     const backfilledResult = await this.db.query<{ cnt: number }>(backfilledSql);
     const backfilled_rows = backfilledResult.rows[0]?.cnt ?? 0;

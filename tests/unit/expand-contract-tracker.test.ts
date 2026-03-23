@@ -873,7 +873,10 @@ describe("ExpandContractTracker", () => {
       expect(result.is_complete).toBe(true);
     });
 
-    it("includes source_filter in queries when provided", async () => {
+    it("ignores source_filter to prevent SQL injection", async () => {
+      // SECURITY: source_filter was removed because it allowed raw SQL
+      // injection. This test verifies that even when provided, it is
+      // not included in the generated queries.
       const db = await createConnectedClient();
       const tracker = new ExpandContractTracker(db);
       const pgClient = getPgClient();
@@ -891,17 +894,15 @@ describe("ExpandContractTracker", () => {
         source_filter: "name IS NOT NULL",
       });
 
-      // Both queries should include the source filter
+      // Neither query should include the source_filter text
       const countQueries = pgClient.queries.filter((q) =>
         q.text.includes("COUNT(*)"),
       );
       expect(countQueries.length).toBeGreaterThanOrEqual(2);
 
-      const totalQuery = countQueries.find((q) => !q.text.includes("IS NOT NULL AND"));
-      expect(totalQuery?.text).toContain("WHERE name IS NOT NULL");
-
-      const backfilledQuery = countQueries.find((q) => q.text.includes("IS NOT NULL AND"));
-      expect(backfilledQuery?.text).toContain("AND name IS NOT NULL");
+      for (const query of countQueries) {
+        expect(query.text).not.toContain("name IS NOT NULL");
+      }
     });
 
     it("escapes identifiers to prevent SQL injection", async () => {

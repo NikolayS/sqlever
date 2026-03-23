@@ -226,7 +226,15 @@ export function buildPsqlCommand(
   // When lockTimeout is set, prepend a -c "SET lock_timeout = '<ms>ms'"
   // command before the script file. psql executes -c commands in order,
   // so the SET takes effect before the script runs.
+  //
+  // SECURITY: Validate that lockTimeout is a safe non-negative integer
+  // before interpolating into the SQL command string.
   if (options.lockTimeout != null && options.lockTimeout >= 0) {
+    if (!Number.isFinite(options.lockTimeout) || !Number.isInteger(options.lockTimeout)) {
+      throw new Error(
+        `Invalid lock timeout: ${options.lockTimeout}. Must be a non-negative integer.`,
+      );
+    }
     args.push("-c", `SET lock_timeout = '${options.lockTimeout}ms'`);
   }
 
