@@ -292,12 +292,15 @@ describe("parsePlan — change parsing", () => {
 
   it("handles planner name that is just whitespace", () => {
     // Edge case from customer-zero: "  <sqitch@01157dfe3b0b>"
+    // Sqitch's regex backtracking yields planner_name = " " (single space)
+    // because [[:blank:]]* after ts_re, [^<]+, and [[:blank:]]+ before <
+    // divide the 3 spaces as 1+1+1, so planner_name = " ".
     const plan = parsePlan(
       minimalPlan([
         "my_change 2024-01-15T10:30:00Z   <sqitch@host> # note",
       ]),
     );
-    expect(plan.changes[0]!.planner_name).toBe("");
+    expect(plan.changes[0]!.planner_name).toBe(" ");
     expect(plan.changes[0]!.planner_email).toBe("sqitch@host");
   });
 });
@@ -805,12 +808,12 @@ describe("customer-zero fixture", () => {
   it("handles empty planner names (just whitespace)", () => {
     const plan = parsePlan(content);
     // Line 157: "20251013_toggle_ai_models ... <sqitch@01157dfe3b0b>"
-    // Planner name is "  " which trims to ""
+    // Sqitch's regex backtracking yields planner_name = " " (single space)
     const change = plan.changes.find(
       (c) => c.name === "20251013_toggle_ai_models",
     );
     expect(change).toBeDefined();
-    expect(change!.planner_name).toBe("");
+    expect(change!.planner_name).toBe(" ");
     expect(change!.planner_email).toBe("sqitch@01157dfe3b0b");
   });
 

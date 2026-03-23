@@ -194,15 +194,18 @@ function parseEntry(line: string, lineNum: number): ParsedEntry {
   }
 
   const plannerEmail = afterTs.slice(emailStartIdx + 1, emailEndIdx);
-  // Sqitch's regex: (?<planner_name>[^<]+)[[:blank:]]+<(?<planner_email>[^>]+)>
-  // [^<]+ is greedy, [[:blank:]]+ needs >=1 blank, so planner_name gets all
-  // chars before '<' except the final delimiter blank.  We replicate that by
-  // trimming leading whitespace (timestamp delimiter) and stripping exactly
-  // one trailing blank (the name/email delimiter).
-  const rawName = afterTs.slice(0, emailStartIdx).trimStart();
-  const plannerName = rawName.endsWith(" ") || rawName.endsWith("\t")
-    ? rawName.slice(0, -1)
-    : rawName;
+  // Sqitch's full-line regex combines [[:blank:]]* (after timestamp) with
+  //   (?<planner_name>[^<]+)[[:blank:]]+<(?<planner_email>[^>]+)>
+  // The greedy [^<]+ and backtracking interaction means planner_name gets
+  // all non-'<' chars before the email EXCEPT the final delimiter blank(s),
+  // while the leading [[:blank:]]* consumes only the blanks it must to let
+  // [^<]+ match at least one character.
+  //
+  // We replicate this with a regex that mirrors Sqitch's combined pattern.
+  // This correctly handles edge cases like planner_name being whitespace-only
+  // (e.g. "   <email>" → planner_name = " ").
+  const plannerMatch = afterTs.match(/^[ \t]*([^<]+)[ \t]+</);
+  const plannerName = plannerMatch ? plannerMatch[1] : afterTs.slice(0, emailStartIdx).trim();
 
   // Note is after the email closing >
   const afterEmail = afterTs.slice(emailEndIdx + 1);
