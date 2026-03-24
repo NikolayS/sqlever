@@ -87,8 +87,8 @@ beforeAll(async () => {
 // ─── Registry ────────────────────────────────────────────────────────
 
 describe("rule registry", () => {
-  test("allRules contains 27 rules", () => {
-    expect(allRules).toHaveLength(27);
+  test("allRules contains 33 rules", () => {
+    expect(allRules).toHaveLength(33);
   });
 
   test("getRule returns rules by ID", () => {

@@ -1,0 +1,3 @@
+BEGIN;
+ALTER TYPE status ADD VALUE 'archived';
+COMMIT;
