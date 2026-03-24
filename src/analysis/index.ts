@@ -169,6 +169,12 @@ export class Analyzer {
       // Skip globally disabled rules
       if (globalSkip.has(rule.id)) continue;
 
+      // Skip default-off rules unless explicitly enabled in config
+      if (rule.defaultOff) {
+        const ruleConfig = config.rules?.[rule.id];
+        if (!ruleConfig?.severity || ruleConfig.severity === "off") continue;
+      }
+
       // Skip connected rules when no db is available
       if (rule.type === "connected" && !db) continue;
 

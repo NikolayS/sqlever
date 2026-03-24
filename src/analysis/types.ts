@@ -201,6 +201,8 @@ export interface Rule {
   severity: Severity;
   /** Whether this rule is static, connected, or hybrid. */
   type: RuleType;
+  /** If true, the rule is off by default and must be explicitly enabled in config. */
+  defaultOff?: boolean;
   /** Run the rule against the given context, returning any findings. */
   check(context: AnalysisContext): Finding[];
 }

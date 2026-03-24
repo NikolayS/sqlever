@@ -1,0 +1,5 @@
+DO $$
+BEGIN
+  TRUNCATE orders CASCADE;
+END;
+$$;

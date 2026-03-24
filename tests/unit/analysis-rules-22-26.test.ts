@@ -81,8 +81,8 @@ beforeAll(async () => {
 // ─── Registry update ──────────────────────────────────────────────────
 
 describe("rule registry (SA022-SA026)", () => {
-  test("allRules contains 27 rules (SA001-SA026 plus SA002b)", () => {
-    expect(allRules).toHaveLength(27);
+  test("allRules contains 33 rules (SA001-SA032 plus SA002b)", () => {
+    expect(allRules).toHaveLength(33);
   });
 
   test("getRule returns SA022-SA026 by ID", () => {

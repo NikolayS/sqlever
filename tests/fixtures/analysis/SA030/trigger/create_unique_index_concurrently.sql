@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX CONCURRENTLY idx_email ON users (email);

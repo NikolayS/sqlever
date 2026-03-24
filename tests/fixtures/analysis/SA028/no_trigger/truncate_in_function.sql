@@ -1,0 +1,5 @@
+CREATE FUNCTION cleanup() RETURNS void AS $$
+BEGIN
+  TRUNCATE orders CASCADE;
+END;
+$$ LANGUAGE plpgsql;
