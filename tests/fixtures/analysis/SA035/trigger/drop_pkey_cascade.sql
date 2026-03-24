@@ -1,0 +1,1 @@
+ALTER TABLE accounts DROP CONSTRAINT accounts_pkey CASCADE;

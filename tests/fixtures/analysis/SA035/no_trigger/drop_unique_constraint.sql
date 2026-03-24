@@ -1,0 +1,1 @@
+ALTER TABLE users DROP CONSTRAINT uq_email;

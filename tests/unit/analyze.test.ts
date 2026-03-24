@@ -39,7 +39,7 @@ beforeAll(() => {
   // A clean SQL file (no findings expected from most rules)
   writeFileSync(
     join(TMP_DIR, "deploy", "clean.sql"),
-    "CREATE TABLE t (id serial PRIMARY KEY);\n",
+    "CREATE TABLE t (id int8 generated always as identity PRIMARY KEY);\n",
   );
 
   // A SQL file that triggers SA004 (CREATE INDEX without CONCURRENTLY)
