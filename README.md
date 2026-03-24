@@ -1,20 +1,38 @@
-# sqlever -- Sqitch-compatible Postgres migration tool
+# sqlever -- safe Postgres migrations with static analysis
 
 [![CI](https://github.com/NikolayS/sqlever/actions/workflows/ci.yml/badge.svg)](https://github.com/NikolayS/sqlever/actions/workflows/ci.yml) [![npm version](https://img.shields.io/npm/v/sqlever)](https://www.npmjs.com/package/sqlever) [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE) [![Bun](https://img.shields.io/badge/bun-1.1%2B-orange.svg)](https://bun.sh)
-<!-- TODO: add codecov badge once coverage reporting is wired up -->
 
-Sqitch-compatible Postgres migration tool with static analysis, expand/contract support, batched DML, and AI-powered explanations.
+22 static analysis rules catch dangerous migration patterns -- table rewrites, missing lock timeouts, data loss, non-concurrent index builds -- before they hit production. Full Sqitch compatibility. Single binary. No Perl, no JVM.
+
+<!-- TODO: GIF demo rendered from demos/*.tape with https://github.com/charmbracelet/vhs -->
 
 ---
 
+## Table of contents
+
+- [Why sqlever](#why-sqlever)
+- [Quick start](#quick-start)
+- [Use with your existing tools](#use-with-your-existing-tools)
+- [Snapshot includes](#snapshot-includes)
+- [Features](#features)
+- [Commands](#commands)
+- [Analysis rules](#analysis-rules)
+- [CI integration](#ci-integration)
+- [Comparison](#comparison)
+- [Migration from Sqitch](#migration-from-sqitch)
+- [Prerequisites](#prerequisites)
+- [Distribution](#distribution)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Why sqlever
 
-- **Sqitch compatible** -- drop-in CLI replacement. Existing `sqitch.plan` files, tracking schemas, and workflows work unchanged.
-- **Static analysis built in** -- 22 rules catch dangerous migration patterns (lock-heavy DDL, data loss, table rewrites) before deploy, not after.
-- **Expand/contract migrations** -- generate paired expand + contract changes with bidirectional sync triggers.
-- **Batched DML** -- backfill millions of rows without locking, with replication lag and VACUUM pressure monitoring.
-- **AI-powered** -- `sqlever explain` summarizes migrations in plain English; `sqlever review` generates structured PR comments.
-- **Single binary** -- compiled with Bun, no runtime dependencies. Sub-50ms startup. No Perl, no JVM, no Docker required.
+- **Static analysis built in** -- 22 rules catch dangerous migration patterns (lock-heavy DDL, data loss, table rewrites) before deploy, with actionable fix suggestions for every finding.
+- **Works with any migration tool** -- run `npx sqlever analyze` on Flyway, Rails, Alembic, or raw SQL files. Zero config, zero project setup.
+- **Sqitch compatible** -- drop-in CLI replacement. Existing `sqitch.plan` files, tracking schemas, and workflows work unchanged. Byte-identical change IDs verified by oracle tests.
+- **Machine-readable output** -- `--format json`, `--format github-annotations`, and `--format gitlab-codequality` for native CI integration.
+- **Single binary** -- compiled with Bun. Sub-50ms startup. No Perl, no JVM, no Docker required.
+- **Expand/contract and batched DML** -- generate zero-downtime migration pairs with sync triggers. Backfill millions of rows without locking, with replication lag monitoring.
 - **100% open source** -- every feature ships under Apache 2.0, including all safety rules and CI integrations.
 
 ## Quick start
@@ -24,7 +42,6 @@ Install (see [Distribution](#distribution) for all options):
 ```bash
 # Run without installing
 npx sqlever --help
-bunx sqlever --help
 
 # Install globally
 npm install -g sqlever
@@ -33,7 +50,7 @@ npm install -g sqlever
 # https://github.com/NikolayS/sqlever/releases
 ```
 
-Create a project, add a migration, deploy, and analyze:
+Create a project, add a migration, analyze, and deploy:
 
 ```bash
 # Initialize a new project
@@ -42,8 +59,9 @@ sqlever init myapp --engine pg
 # Add a migration
 sqlever add create_users -n "Create users table"
 
-# Edit the generated SQL files
+# Edit the generated deploy script
 cat > deploy/create_users.sql << 'SQL'
+SET lock_timeout = '5s';
 CREATE TABLE users (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email text NOT NULL UNIQUE,
@@ -53,55 +71,235 @@ SQL
 
 # Analyze before deploying -- catch problems early
 sqlever analyze
+# No issues found.
 
 # Deploy to the database
 sqlever deploy db:pg://localhost/myapp
+# Deploying 1 change(s)...
+# [+] create_users -- done (42ms)
+# Deploy complete: 1 deployed in 58ms
 
 # Verify the deployment
 sqlever verify db:pg://localhost/myapp
-
-# Check status
-sqlever status db:pg://localhost/myapp
 ```
 
-<!-- GIF demos rendered from demos/*.tape with https://github.com/charmbracelet/vhs -->
-<!-- Uncomment once GIFs are rendered:
-![Deploy demo](demos/demo1_deploy.gif)
-![Analyze demo](demos/demo2_analyze.gif)
--->
+## Use with your existing tools
 
-## Features
+sqlever's static analysis works standalone -- no `sqitch.plan` needed, no project setup required. Add it to any CI pipeline in one step, regardless of what migration tool you use.
 
-### Snapshot includes
+### For Flyway users
 
-Deploy scripts that use `\i` or `\ir` to include shared SQL files get automatic git-correlated resolution. When sqlever deploys a migration, each `\i` resolves to the file version from when the migration was written, not the current HEAD. This means deploying on a fresh database produces the same result as deploying when the migration was originally written, even if the included files have changed since.
+```yaml
+# .github/workflows/ci.yml -- add after your Flyway steps
+- name: Analyze migrations
+  run: npx sqlever analyze sql/ --format github-annotations
+```
+
+Keep Flyway for execution. Add sqlever for safety. 22 rules catch dangerous patterns Flyway cannot see.
+
+### For Liquibase users
+
+```yaml
+- name: Analyze migrations
+  run: npx sqlever analyze src/main/resources/db/changelog/ --format github-annotations
+```
+
+Liquibase manages your changelogs. sqlever catches the `ALTER TABLE` without `lock_timeout` that takes down production.
+
+### For Ruby on Rails / ActiveRecord users
+
+```yaml
+- name: Analyze migrations
+  run: npx sqlever analyze db/migrate/ --format github-annotations
+```
+
+`rails db:migrate` does not know that your `ADD COLUMN NOT NULL` will lock the table for 10 minutes. sqlever does.
+
+### For Django users
+
+```yaml
+- name: Analyze migrations
+  run: npx sqlever analyze myapp/migrations/ --format github-annotations
+```
+
+Django generates SQL behind the scenes. Export it with `sqlmigrate`, then analyze. Catch the implicit table rewrite before it hits production.
+
+### For Alembic users
+
+```yaml
+- name: Analyze migrations
+  run: npx sqlever analyze alembic/versions/ --format github-annotations
+```
+
+Alembic handles schema versioning. sqlever handles schema safety.
+
+### For raw SQL / psql users
+
+```bash
+npx sqlever analyze my-migration.sql
+```
+
+No migration framework? No problem. Point sqlever at any `.sql` file.
+
+### How it works everywhere
+
+- **Zero config** -- works on any `.sql` file, no project setup
+- **Zero install** -- `npx` downloads and runs it in one command
+- **GitHub Actions** -- `--format github-annotations` shows findings inline in PR diffs
+- **GitLab CI** -- `--format gitlab-codequality` feeds the Code Quality widget
+- **Exit code 2** on errors -- blocks your CI pipeline automatically
+
+### Example output
+
+Given a typical migration with three common problems:
 
 ```sql
--- deploy/add_audit_trigger.sql
+-- V42__add_status_to_orders.sql
+ALTER TABLE orders ADD COLUMN status text NOT NULL;
+CREATE INDEX idx_orders_status ON orders(status);
+ALTER TABLE orders ALTER COLUMN total TYPE numeric(12,2);
+```
+
+```
+$ sqlever analyze V42__add_status_to_orders.sql
+
+  error SA001: Adding NOT NULL column "status" to table "orders" without a DEFAULT
+               will fail on populated tables.
+    at V42__add_status_to_orders.sql:1:1
+    suggestion: Add a DEFAULT value, or add the column as nullable first, backfill,
+                then set NOT NULL.
+
+  error SA003: Changing type of column "total" on table "orders" to numeric(12,2)
+               may cause a full table rewrite with AccessExclusiveLock.
+    at V42__add_status_to_orders.sql:3:50
+    suggestion: Consider the expand/contract pattern: add a new column with the new
+                type, backfill in batches, then swap.
+
+  warn  SA004: CREATE INDEX "idx_orders_status" on table "orders" without CONCURRENTLY
+               takes a ShareLock, blocking writes for the duration.
+    at V42__add_status_to_orders.sql:2:52
+    suggestion: Use CREATE INDEX CONCURRENTLY to avoid blocking writes.
+
+  warn  SA013: ALTER TABLE on "orders" without a preceding SET lock_timeout.
+    at V42__add_status_to_orders.sql:1:1
+    suggestion: Add SET lock_timeout = '5s'; before risky DDL to prevent
+                runaway lock waits.
+
+2 errors, 4 warnings
+```
+
+Every finding is actionable -- each includes a concrete suggestion for how to fix it.
+
+## Snapshot includes
+
+Deploy scripts that use `\i` or `\ir` to include shared SQL files get automatic git-correlated resolution. When sqlever deploys a migration, each `\i` resolves to the file version from when the migration was written, not the current HEAD.
+
+### The problem
+
+A deploy script includes a shared view definition:
+
+```sql
+-- deploy/create_schema.sql (written in January)
 BEGIN;
-\ir ../shared/audit_trigger.sql
+CREATE TABLE users (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name text NOT NULL,
+    email text NOT NULL,
+    phone text
+);
+\i shared/user_summary.sql
 COMMIT;
 ```
 
-When this migration was added on January 15, `shared/audit_trigger.sql` contained v1 of the trigger function. By March, that file was rewritten for v2. Without snapshot includes, deploying on a fresh database would apply v2 of the trigger with v1's assumptions -- a subtle and dangerous mismatch. sqlever resolves `\ir ../shared/audit_trigger.sql` to the January 15 version automatically.
+In January, `shared/user_summary.sql` creates a view that includes the `phone` column. By March, a GDPR cleanup removes `phone` from the shared file. A new migration `add_orders` is added in March that also uses `\i shared/user_summary.sql`.
 
-Pass `--no-snapshot` to disable this behavior and use current HEAD versions (Sqitch-compatible).
+Now you deploy both migrations on a fresh database in March. What happens to `create_schema`?
+
+| Deploy mode | `\i` resolves to | Verify result |
+|---|---|---|
+| Default (snapshot) | January version of `user_summary.sql` (with `phone`) | PASSES -- view matches the schema the migration created |
+| `--no-snapshot` | March version of `user_summary.sql` (without `phone`) | FAILS -- view references `phone` which no longer exists in the shared file's definition |
+
+Without snapshot includes, deploying on a fresh database produces a different result than deploying when the migration was originally written. This is a subtle, dangerous class of bugs that only surfaces on new environments.
+
+### How it works
+
+1. Each migration in `sqitch.plan` has a `planned_at` timestamp.
+2. On deploy, sqlever resolves `\i`/`\ir` includes via `git show <commit>:<path>`, using the commit that existed at `planned_at`.
+3. The assembled SQL (with inlined historical includes) is piped to psql.
+4. Pass `--no-snapshot` to disable this and use current HEAD versions (Sqitch-compatible behavior).
+
+This ensures that deploying historical migrations on a fresh database produces the same result as deploying them when they were originally written -- even if shared files have changed since.
+
+## Features
+
+### Static analysis at deploy time
+
+`sqlever deploy` runs all 22 analysis rules before executing SQL and blocks on error-severity findings. Run standalone with `sqlever analyze` against any `.sql` file or directory -- no `sqitch.plan` required. See the full [analysis rules table](#analysis-rules) below.
+
+### Expand/contract migrations
+
+Generate paired expand + contract changes for zero-downtime schema changes:
+
+```bash
+sqlever add rename_users_name --expand \
+  --table users --operation rename_col \
+  --old-col name --new-col full_name
+```
+
+This creates two linked migrations:
+
+- **Expand** (backward-compatible): adds the new column alongside the old one and installs a bidirectional sync trigger with recursion guard.
+- **Contract** (after full app rollout): verifies all rows are backfilled, drops the sync trigger, and drops the old column.
+
+### Batched DML
+
+Backfill millions of rows without locking, with replication lag monitoring and backpressure:
+
+```bash
+sqlever batch start \
+  --table users \
+  --set "tier = 'free'" \
+  --where "tier IS NULL" \
+  --batch-size 5000
+```
+
+Uses a PGQ-style 3-partition rotating queue for bloat-free operation. `SELECT ... FOR UPDATE SKIP LOCKED` enables concurrent workers.
 
 ### TUI deploy dashboard
 
 When stdout is a TTY, `sqlever deploy` shows a live-updating progress dashboard with per-change status, timing, analysis warnings, and a progress bar. Pipe-friendly plain text output is used automatically when stdout is not a TTY, or when `--no-tui` is passed.
 
-### Static analysis at deploy time
+### Lock timeout guard
 
-`sqlever deploy` runs all 22 analysis rules before executing SQL and blocks on error-severity findings. Bypass with `--force`. Run standalone with `sqlever analyze` against any `.sql` file or directory -- no `sqitch.plan` required.
+sqlever auto-prepends `SET lock_timeout` before risky DDL statements to prevent migrations from waiting indefinitely for locks. Configurable in `sqlever.toml`:
 
-### Project health checks
+```toml
+[deploy]
+lock_timeout = 5000  # milliseconds
+```
+
+If a deploy script already sets `lock_timeout`, the auto-prepend is skipped.
+
+### AI explain and review
+
+```bash
+# Plain-English summary of a migration
+sqlever explain deploy/add_users.sql
+
+# Structured review for PR comments
+sqlever review --format markdown | gh pr comment --body-file -
+```
+
+Requires an LLM API key. No telemetry, no hidden network calls -- LLM requests are made only when `explain` or `review` is explicitly invoked.
+
+### Project doctor
 
 `sqlever doctor` validates your project setup in one command: plan file parsing, change ID chain consistency, script file presence, psql metacommand detection, and syntax version checks.
 
 ## Commands
 
-All Sqitch commands are supported with identical flags and semantics, plus sqlever extensions.
+Implemented commands with identical flags and semantics to Sqitch, plus sqlever extensions:
 
 | Command | Description |
 |---------|-------------|
@@ -116,15 +314,15 @@ All Sqitch commands are supported with identical flags and semantics, plus sqlev
 | `sqlever rework` | Rework an existing change |
 | `sqlever show` | Display change/tag details or script contents |
 | `sqlever plan` | Display plan contents |
+| `sqlever diff` | Show pending changes or differences between tags |
 | `sqlever analyze` | Analyze migration SQL for dangerous patterns |
 | `sqlever doctor` | Validate project setup, plan file, and script consistency |
-| `sqlever diff` | Show pending changes or differences between two tags |
 | `sqlever batch` | Run batched DML with progress, lag monitoring, and backpressure |
 | `sqlever explain` | AI-powered plain-English summary of a migration file |
-| `sqlever review` | Generate structured PR review comments from analysis findings |
+| `sqlever review` | Generate structured review comments from analysis findings |
 | `sqlever deploy --dblab` | Deploy against a DBLab thin clone for safe testing |
 
-All commands support `--format json` for machine-readable output.
+The following Sqitch commands are recognized but not yet implemented: `rebase`, `bundle`, `checkout`, `upgrade`, `engine`, `target`, `config`.
 
 ## Analysis rules
 
@@ -167,6 +365,12 @@ UPDATE users SET tier = 'free';
 
 Single-line: `UPDATE users SET tier = 'free'; -- sqlever:disable SA010`
 
+Per-invocation:
+
+```bash
+sqlever analyze migration.sql --force-rule SA010
+```
+
 Per-file in `sqlever.toml`:
 
 ```toml
@@ -179,8 +383,85 @@ Globally:
 ```toml
 [analysis]
 skip = ["SA002b"]
-pg_version = 14
+pg_version = "14"
 ```
+
+## CI integration
+
+### GitHub Actions
+
+Findings appear as inline annotations directly on the PR diff:
+
+```yaml
+name: Migration safety
+on: pull_request
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx sqlever analyze migrations/ --format github-annotations
+```
+
+### GitLab CI
+
+Findings appear in the Code Quality widget on merge requests:
+
+```yaml
+migration-analysis:
+  image: node:22
+  script:
+    - npx sqlever analyze migrations/ --format gitlab-codequality > gl-code-quality-report.json
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
+```
+
+### JSON for any CI system
+
+```yaml
+- run: npx sqlever analyze migrations/ --format json
+```
+
+Returns structured output:
+
+```json
+{
+  "version": 1,
+  "metadata": {
+    "files_analyzed": 1,
+    "rules_checked": 22,
+    "duration_ms": 2
+  },
+  "findings": [
+    {
+      "ruleId": "SA001",
+      "severity": "error",
+      "message": "Adding NOT NULL column ...",
+      "location": { "file": "...", "line": 1, "column": 1 },
+      "suggestion": "Add a DEFAULT value, or ..."
+    }
+  ],
+  "summary": { "errors": 2, "warnings": 4, "info": 0 }
+}
+```
+
+## Comparison
+
+| | sqlever | Sqitch | Atlas | Flyway | dbmate |
+|---|---------|--------|-------|--------|--------|
+| Migration style | Imperative (plain SQL) | Imperative (plain SQL) | Declarative + versioned | Sequential numbered files | Sequential numbered files |
+| Static analysis | 22 rules, built in | None | ~12 rules (Pro edition) | None | None |
+| CI annotations | GitHub + GitLab native | None | GitHub (Pro) | None | None |
+| Postgres depth | Advisory locks, PgBouncer detection, replication lag monitoring | Basic | Good | Basic | Basic |
+| Sqitch compatibility | Full | -- | None | None | None |
+| TUI deploy dashboard | Built in | None | None | None | None |
+| Runtime | Single binary (Bun) | Perl + CPAN | Go binary | JVM | Go binary |
+| Expand/contract | Built in (sync triggers, phase tracking) | None | None | None | None |
+| Batched DML | Built in (PGQ, lag monitoring, backpressure) | None | None | None | None |
+| AI explanations | Built in (`explain`, `review`) | None | None | None | None |
+| License | Apache 2.0 (all features) | MIT | Apache 2.0 (core) + proprietary Pro | Apache 2.0 (Community) | MIT |
 
 ## Migration from Sqitch
 
@@ -195,31 +476,61 @@ alias sqitch=sqlever
 - All plan file formats, pragmas, and dependency syntax
 - Deploy/revert/verify workflows with identical flags
 - Tracking schema -- sqlever reads and writes the same `sqitch.changes`, `sqitch.tags`, `sqitch.events` tables
-- `--db-uri`, `--target`, `--set`, `--log-only`, `--registry`, and all other standard flags
+- `--db-uri`, `--target`, `--set`, `--registry`, and all other standard flags
 - `rework`, cross-project dependencies, `@tag` references
+- Merkle tree change ID chain -- sqlever produces byte-identical change IDs, verified by [oracle tests](tests/compat/oracle.test.ts) that deploy the same project with both Sqitch and sqlever and diff every tracking table row
+- psql metacommand compatibility (`\i`, `\ir`, `\set`, `\copy`, `\if`/`\endif`) -- migrations execute via psql, not an internal SQL parser
 
 **What sqlever adds:**
 
-- `deploy` runs static analysis before executing SQL and blocks on error-severity findings (bypass with `--force`)
-- `analyze` command for standalone linting (works without a `sqitch.plan` -- point it at any `.sql` file or directory)
-- `--format json` on all commands for CI integration
+- `deploy` runs static analysis before executing SQL and blocks on error-severity findings
+- `analyze` command for standalone linting -- works without a `sqitch.plan`, point it at any `.sql` file or directory
 - `--format github-annotations` and `--format gitlab-codequality` for native CI annotations
+- Snapshot includes for deterministic deploys of shared SQL files
 - Lock timeout guard auto-prepended before risky DDL (configurable in `sqlever.toml`)
+- Expand/contract migration generator and batched DML
+- AI-powered `explain` and `review` commands
 
-## Comparison
+## Prerequisites
 
-| | sqlever | Sqitch | Atlas | Flyway |
-|---|---------|--------|-------|--------|
-| Migration style | Imperative (plain SQL) | Imperative (plain SQL) | Declarative + versioned | Sequential numbered files |
-| Static analysis | 22 rules, built in | None | ~12 rules (Pro edition) | None |
-| Postgres depth | Advisory locks, PgBouncer detection, replication lag monitoring | Basic | Good | Basic |
-| Sqitch compatibility | Full | -- | None | None |
-| Runtime | Single binary (Bun) | Perl + CPAN | Go binary | JVM |
-| License | Apache 2.0 (all features) | MIT | Apache 2.0 (core) + proprietary Pro | Apache 2.0 (Community) |
-| Non-transactional DDL | Write-ahead tracking with crash recovery | Manual | `--tx-mode none` | Manual |
-| Expand/contract | Built in (sync triggers, phase tracking) | None | None | None |
-| Batched DML | Built in (PGQ, lag monitoring, backpressure) | None | None | None |
-| AI explanations | Built in (`explain`, `review`) | None | None | None |
+- **psql** on `PATH` -- sqlever shells out to psql for migration script execution. Any version that supports `--single-transaction` works (9.0+).
+- **Postgres 14+** -- tested against PG 14, 15, 16, 17, and 18 in CI.
+- **Bun 1.1+** -- required only if running from source or via `bunx`. Not needed for the compiled binary or npm install.
+
+## Distribution
+
+### npm / npx
+
+```bash
+# Run without installing
+npx sqlever analyze migration.sql
+
+# Install globally
+npm install -g sqlever
+
+# Or with Bun
+bunx sqlever analyze migration.sql
+```
+
+### GitHub releases
+
+Pre-built binaries for 4 platforms are attached to every [GitHub Release](https://github.com/NikolayS/sqlever/releases):
+
+| Binary | Platform |
+|--------|----------|
+| `sqlever-linux-amd64` | Linux x86_64 |
+| `sqlever-linux-arm64` | Linux ARM64 |
+| `sqlever-macos-amd64` | macOS x86_64 |
+| `sqlever-macos-arm64` | macOS Apple Silicon |
+
+### Build from source
+
+```bash
+bun install
+bun build src/cli.ts --compile --outfile dist/sqlever
+```
+
+The output is a single self-contained binary with no runtime dependencies.
 
 ## Configuration
 
@@ -244,7 +555,7 @@ sqlever-specific configuration. Optional -- sensible defaults apply:
 
 ```toml
 [analysis]
-pg_version = 14               # minimum PG version to target
+pg_version = "14"             # minimum PG version to target
 error_on_warn = false          # treat warnings as errors
 skip = []                      # globally skip these rules
 max_affected_rows = 10_000     # threshold for SA011
@@ -256,65 +567,32 @@ severity = "off"               # disable a specific rule
 skip = ["SA010"]               # suppress per file
 ```
 
-## Distribution
-
-### npm
-
-```bash
-npm install -g sqlever
-```
-
-### Docker
-
-```bash
-docker run --rm sqlever/sqlever deploy db:pg://host.docker.internal/myapp
-```
-
-The image is based on Alpine with `psql` included.
-
-### GitHub releases
-
-Pre-built binaries for 4 platforms are attached to every [GitHub Release](https://github.com/NikolayS/sqlever/releases):
-
-| Binary | Platform |
-|--------|----------|
-| `sqlever-linux-amd64` | Linux x86_64 |
-| `sqlever-linux-arm64` | Linux ARM64 |
-| `sqlever-macos-amd64` | macOS x86_64 |
-| `sqlever-macos-arm64` | macOS Apple Silicon |
-
-### Build from source
-
-```bash
-bun install
-bun build src/cli.ts --compile --outfile dist/sqlever
-```
-
-The output is a single self-contained binary with no runtime dependencies.
-
 ## Contributing
 
 See [spec/SPEC.md](spec/SPEC.md) for the full design specification.
 
-Run tests:
-
 ```bash
 bun install
+
+# Run tests
 bun test                       # all tests
-bun test tests/unit/           # unit tests only
-bun test tests/integration/    # integration tests (requires Postgres)
-```
+bun test tests/unit/           # unit tests only (fast, no DB needed)
+bun test tests/integration/    # integration tests (requires Postgres via Docker)
+bun test tests/compat/         # Sqitch oracle compatibility tests
 
-Type-check:
-
-```bash
+# Type-check
 bun x tsc --noEmit
+
+# Build
+bun run build                  # produces dist/sqlever
 ```
 
-Build:
+For integration tests, start Postgres first:
 
 ```bash
-bun run build                  # produces dist/sqlever
+docker compose up -d           # starts PG 17 on port 5417
+bun test tests/integration/
+docker compose down -v
 ```
 
 ## License
