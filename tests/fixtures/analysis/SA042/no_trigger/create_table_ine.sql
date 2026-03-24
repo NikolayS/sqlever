@@ -1,0 +1,4 @@
+create table if not exists users (
+  id int8 generated always as identity primary key,
+  name text
+);

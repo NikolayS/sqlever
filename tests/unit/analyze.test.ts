@@ -36,10 +36,10 @@ beforeAll(() => {
   mkdirSync(join(TMP_DIR, "deploy"), { recursive: true });
   mkdirSync(join(TMP_DIR, "empty-dir"), { recursive: true });
 
-  // A clean SQL file (no findings expected from most rules)
+  // A clean SQL file (no findings expected from any rule)
   writeFileSync(
     join(TMP_DIR, "deploy", "clean.sql"),
-    "CREATE TABLE t (id int8 generated always as identity PRIMARY KEY);\n",
+    "CREATE TABLE IF NOT EXISTS t (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);\n",
   );
 
   // A SQL file that triggers SA004 (CREATE INDEX without CONCURRENTLY)
