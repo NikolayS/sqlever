@@ -28,6 +28,11 @@ export { SA018 } from "./SA018.js";
 export { SA019 } from "./SA019.js";
 export { SA020 } from "./SA020.js";
 export { SA021 } from "./SA021.js";
+export { SA022 } from "./SA022.js";
+export { SA023 } from "./SA023.js";
+export { SA024 } from "./SA024.js";
+export { SA025 } from "./SA025.js";
+export { SA026 } from "./SA026.js";
 
 import { SA001 } from "./SA001.js";
 import { SA002 } from "./SA002.js";
@@ -51,6 +56,11 @@ import { SA018 } from "./SA018.js";
 import { SA019 } from "./SA019.js";
 import { SA020 } from "./SA020.js";
 import { SA021 } from "./SA021.js";
+import { SA022 } from "./SA022.js";
+import { SA023 } from "./SA023.js";
+import { SA024 } from "./SA024.js";
+import { SA025 } from "./SA025.js";
+import { SA026 } from "./SA026.js";
 
 import type { Rule } from "../types.js";
 
@@ -78,6 +88,11 @@ export const allRules: Rule[] = [
   SA019,
   SA020,
   SA021,
+  SA022,
+  SA023,
+  SA024,
+  SA025,
+  SA026,
 ];
 
 /** Look up a rule by ID */
