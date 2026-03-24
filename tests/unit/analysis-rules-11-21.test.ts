@@ -860,27 +860,57 @@ describe("SA020: CONCURRENTLY in transactional context", () => {
     });
   }
 
-  test("fires on CREATE INDEX CONCURRENTLY", () => {
+  test("fires on CREATE INDEX CONCURRENTLY inside explicit BEGIN", () => {
     const ctx = makeContext(
-      "CREATE INDEX CONCURRENTLY idx ON users (email);",
+      "BEGIN; CREATE INDEX CONCURRENTLY idx ON users (email); COMMIT;",
     );
     const findings = SA020.check(ctx);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.message).toContain("CREATE INDEX CONCURRENTLY");
   });
 
-  test("fires on DROP INDEX CONCURRENTLY", () => {
-    const ctx = makeContext("DROP INDEX CONCURRENTLY idx;");
+  test("fires on DROP INDEX CONCURRENTLY inside explicit BEGIN", () => {
+    const ctx = makeContext("BEGIN; DROP INDEX CONCURRENTLY idx; COMMIT;");
     const findings = SA020.check(ctx);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.message).toContain("DROP INDEX CONCURRENTLY");
   });
 
-  test("fires on REINDEX CONCURRENTLY", () => {
-    const ctx = makeContext("REINDEX TABLE CONCURRENTLY users;");
+  test("fires on REINDEX CONCURRENTLY inside explicit BEGIN", () => {
+    const ctx = makeContext("BEGIN; REINDEX TABLE CONCURRENTLY users; COMMIT;");
     const findings = SA020.check(ctx);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.message).toContain("REINDEX CONCURRENTLY");
+  });
+
+  test("fires on CIC when isTransactional is true", () => {
+    const ctx = makeContext(
+      "CREATE INDEX CONCURRENTLY idx ON users (email);",
+      { isTransactional: true },
+    );
+    const findings = SA020.check(ctx);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.message).toContain("CREATE INDEX CONCURRENTLY");
+  });
+
+  test("does not fire on standalone CIC without transaction context", () => {
+    const ctx = makeContext(
+      "CREATE INDEX CONCURRENTLY idx ON users (email);",
+    );
+    const findings = SA020.check(ctx);
+    expect(findings).toHaveLength(0);
+  });
+
+  test("does not fire on standalone DROP INDEX CONCURRENTLY", () => {
+    const ctx = makeContext("DROP INDEX CONCURRENTLY idx;");
+    const findings = SA020.check(ctx);
+    expect(findings).toHaveLength(0);
+  });
+
+  test("does not fire on standalone REINDEX CONCURRENTLY", () => {
+    const ctx = makeContext("REINDEX TABLE CONCURRENTLY users;");
+    const findings = SA020.check(ctx);
+    expect(findings).toHaveLength(0);
   });
 
   test("does not fire on regular CREATE INDEX", () => {
@@ -904,14 +934,14 @@ describe("SA020: CONCURRENTLY in transactional context", () => {
   test("suppressed by -- sqlever:auto-commit directive", () => {
     const sql = `-- sqlever:auto-commit
 CREATE INDEX CONCURRENTLY idx ON users (email);`;
-    const ctx = makeContext(sql);
+    const ctx = makeContext(sql, { isTransactional: true });
     const findings = SA020.check(ctx);
     expect(findings).toHaveLength(0);
   });
 
   test("includes suggestion about auto-commit", () => {
     const ctx = makeContext(
-      "CREATE INDEX CONCURRENTLY idx ON users (email);",
+      "BEGIN; CREATE INDEX CONCURRENTLY idx ON users (email); COMMIT;",
     );
     const findings = SA020.check(ctx);
     expect(findings[0]!.suggestion).toContain("auto-commit");

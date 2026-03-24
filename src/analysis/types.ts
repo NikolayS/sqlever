@@ -176,6 +176,8 @@ export interface AnalysisContext {
   db?: DatabaseClient;
   /** Whether this file is in a revert context (e.g. under revert/ in a sqitch project). */
   isRevertContext?: boolean;
+  /** Whether the script runs inside a transaction block (e.g. deploy mode without auto-commit). */
+  isTransactional?: boolean;
 }
 
 // ---------------------------------------------------------------------------

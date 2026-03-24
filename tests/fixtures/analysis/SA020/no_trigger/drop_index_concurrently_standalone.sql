@@ -1,3 +1,1 @@
-BEGIN;
 DROP INDEX CONCURRENTLY idx_users_email;
-COMMIT;

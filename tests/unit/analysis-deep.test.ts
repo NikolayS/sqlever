@@ -429,25 +429,43 @@ ALTER TABLE users VALIDATE CONSTRAINT chk_age;`;
 });
 
 describe("SA020: CONCURRENTLY in transactional context", () => {
-  test("CIC without auto-commit marker — triggers", () => {
+  test("CIC inside explicit BEGIN — triggers", () => {
     const ctx = makeContext(
-      "CREATE INDEX CONCURRENTLY idx ON users (email);",
+      "BEGIN; CREATE INDEX CONCURRENTLY idx ON users (email); COMMIT;",
     );
     const findings = SA020.check(ctx);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.ruleId).toBe("SA020");
   });
 
-  test("CIC with -- sqlever:auto-commit — no trigger", () => {
-    const sql = `-- sqlever:auto-commit
-CREATE INDEX CONCURRENTLY idx ON users (email);`;
-    const ctx = makeContext(sql);
+  test("CIC with isTransactional — triggers", () => {
+    const ctx = makeContext(
+      "CREATE INDEX CONCURRENTLY idx ON users (email);",
+      { isTransactional: true },
+    );
+    const findings = SA020.check(ctx);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.ruleId).toBe("SA020");
+  });
+
+  test("standalone CIC without transaction context — no trigger", () => {
+    const ctx = makeContext(
+      "CREATE INDEX CONCURRENTLY idx ON users (email);",
+    );
     const findings = SA020.check(ctx);
     expect(findings).toHaveLength(0);
   });
 
-  test("DROP INDEX CONCURRENTLY without marker — triggers", () => {
-    const ctx = makeContext("DROP INDEX CONCURRENTLY old_idx;");
+  test("CIC with -- sqlever:auto-commit — no trigger", () => {
+    const sql = `-- sqlever:auto-commit
+CREATE INDEX CONCURRENTLY idx ON users (email);`;
+    const ctx = makeContext(sql, { isTransactional: true });
+    const findings = SA020.check(ctx);
+    expect(findings).toHaveLength(0);
+  });
+
+  test("DROP INDEX CONCURRENTLY inside BEGIN — triggers", () => {
+    const ctx = makeContext("BEGIN; DROP INDEX CONCURRENTLY old_idx; COMMIT;");
     const findings = SA020.check(ctx);
     expect(findings).toHaveLength(1);
   });
@@ -455,13 +473,13 @@ CREATE INDEX CONCURRENTLY idx ON users (email);`;
   test("DROP INDEX CONCURRENTLY with marker — no trigger", () => {
     const sql = `-- sqlever:auto-commit
 DROP INDEX CONCURRENTLY old_idx;`;
-    const ctx = makeContext(sql);
+    const ctx = makeContext(sql, { isTransactional: true });
     const findings = SA020.check(ctx);
     expect(findings).toHaveLength(0);
   });
 
-  test("REINDEX CONCURRENTLY without marker — triggers", () => {
-    const ctx = makeContext("REINDEX TABLE CONCURRENTLY users;");
+  test("REINDEX CONCURRENTLY inside BEGIN — triggers", () => {
+    const ctx = makeContext("BEGIN; REINDEX TABLE CONCURRENTLY users; COMMIT;");
     const findings = SA020.check(ctx);
     expect(findings).toHaveLength(1);
   });
