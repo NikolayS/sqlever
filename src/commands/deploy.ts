@@ -25,12 +25,14 @@ import { parseDblabOptions, runDblabDeploy } from "./deploy-dblab";
 import { isExpandChange, isContractChange } from "../expand-contract/phase-filter";
 import { ExpandContractTracker } from "../expand-contract/tracker";
 import { loadPlan } from "./shared";
+import { runPreDeployAnalysis, type PreDeployAnalysisResult } from "./deploy-analyze";
 
 // ---------------------------------------------------------------------------
 // Exit codes (SPEC R6)
 // ---------------------------------------------------------------------------
 
 export const EXIT_DEPLOY_FAILED = 1;
+export const EXIT_ANALYSIS_BLOCKED = 2;
 export const EXIT_CONCURRENT_DEPLOY = 4;
 export const EXIT_LOCK_TIMEOUT = 5;
 export const EXIT_DB_UNREACHABLE = 10;
@@ -101,6 +103,12 @@ export interface DeployOptions {
   noSnapshot: boolean;
   /** Expand/contract phase filter: deploy only expand or contract migrations. */
   phase?: DeployPhase;
+  /** Skip pre-deploy static analysis (--no-analyze). */
+  noAnalyze: boolean;
+  /** Bypass all analysis errors (--force). */
+  force: boolean;
+  /** Bypass specific analysis rules (--force-rule SA003). */
+  forceRules: string[];
 }
 
 /**
@@ -115,6 +123,9 @@ export function parseDeployOptions(args: ParsedArgs): DeployOptions {
   let lockTimeout: number | undefined;
   let noTui = false;
   let noSnapshot = false;
+  let noAnalyze = false;
+  let force = false;
+  const forceRules: string[] = [];
   let phase: DeployPhase | undefined;
   const variables: Record<string, string> = {};
 
@@ -214,6 +225,25 @@ export function parseDeployOptions(args: ParsedArgs): DeployOptions {
       i++;
       continue;
     }
+    if (token === "--no-analyze") {
+      noAnalyze = true;
+      i++;
+      continue;
+    }
+    if (token === "--force") {
+      force = true;
+      i++;
+      continue;
+    }
+    if (token === "--force-rule") {
+      const val = rest[++i];
+      if (!val || val.startsWith("-")) {
+        throw new Error("--force-rule requires a rule ID argument");
+      }
+      forceRules.push(val);
+      i++;
+      continue;
+    }
     // Positional: treat as target name
     if (!args.target && !args.dbUri) {
       // Could be a target name or URI
@@ -297,6 +327,9 @@ export function parseDeployOptions(args: ParsedArgs): DeployOptions {
     committerEmail,
     noTui,
     noSnapshot,
+    noAnalyze,
+    force,
+    forceRules,
     phase,
   };
 }
@@ -345,6 +378,8 @@ export interface DeployResult {
   error?: string;
   /** Whether this was a dry-run. */
   dryRun: boolean;
+  /** Analysis findings from pre-deploy check (included for JSON output). */
+  analysis?: PreDeployAnalysisResult;
 }
 
 // ---------------------------------------------------------------------------
@@ -407,6 +442,45 @@ export async function executeDeploy(
   // Build script name lookup: change_id -> script filename (handles reworks)
   const dryRunScriptNameMap = buildScriptNameMap(plan);
 
+  // 2b. Pre-deploy static analysis (R4)
+  let analysisResult: PreDeployAnalysisResult | undefined;
+  if (!options.noAnalyze) {
+    // Collect deploy script paths for pending changes
+    const scriptPaths: string[] = [];
+    for (const change of allChanges) {
+      const sName = dryRunScriptNameMap.get(change.change_id) ?? change.name;
+      const deployPath = scriptPath(topDir, deployDir, sName);
+      if (existsSync(deployPath)) {
+        scriptPaths.push(deployPath);
+      }
+    }
+
+    if (scriptPaths.length > 0) {
+      analysisResult = await runPreDeployAnalysis(scriptPaths, {
+        forceRules: options.forceRules,
+        force: options.force,
+      });
+
+      // Display findings (text mode)
+      const outputCfg = getConfig();
+      if (outputCfg.format !== "json" && analysisResult.output) {
+        process.stdout.write(analysisResult.output);
+      }
+
+      // Block deploy on error-severity findings (unless --force)
+      if (analysisResult.blocked) {
+        logError("Deploy blocked by static analysis errors. Use --force to override or --no-analyze to skip.");
+        return {
+          deployed: 0,
+          skipped: 0,
+          dryRun: options.dryRun,
+          error: "Static analysis errors found",
+          analysis: analysisResult,
+        };
+      }
+    }
+  }
+
   // Dry-run: show what would be deployed without touching the database.
   // Per spec, --dry-run makes zero DB changes.
   if (options.dryRun) {
@@ -419,7 +493,7 @@ export async function executeDeploy(
       const marker = autoCommit ? " [auto-commit]" : "";
       info(`  + ${change.name}${marker}`);
     }
-    return { deployed: 0, skipped: 0, dryRun: true };
+    return { deployed: 0, skipped: 0, dryRun: true, analysis: analysisResult };
   }
 
   // 3. Connect to database
@@ -879,7 +953,7 @@ export async function executeDeploy(
       info(`Deployed ${deployedCount} change(s) successfully.`);
     }
 
-    return { deployed: deployedCount, skipped: 0, dryRun: false };
+    return { deployed: deployedCount, skipped: 0, dryRun: false, analysis: analysisResult };
   } finally {
     // Always release advisory lock
     if (lockAcquired) {
@@ -1092,6 +1166,9 @@ export async function runDeploy(args: ParsedArgs): Promise<number> {
   }, plan);
 
   if (result.error && !result.dryRun) {
+    if (result.error === "Static analysis errors found") {
+      return EXIT_ANALYSIS_BLOCKED;
+    }
     if (result.error === "Concurrent deploy detected") {
       return EXIT_CONCURRENT_DEPLOY;
     }

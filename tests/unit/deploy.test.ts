@@ -193,6 +193,9 @@ function defaultOptions(dir: string): DeployOptions {
     committerEmail: "test@example.com",
     noTui: true,
     noSnapshot: false,
+    noAnalyze: true,
+    force: false,
+    forceRules: [],
   };
 }
 
