@@ -225,6 +225,8 @@ export interface AnalyzeOptions {
   pgVersion?: number;
   /** Whether to treat the file as a revert script (affects SA007 etc.). */
   isRevert?: boolean;
+  /** Whether the script runs inside a transaction block (deploy mode without auto-commit). */
+  isTransactional?: boolean;
 }
 
 // ---------------------------------------------------------------------------

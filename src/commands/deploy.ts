@@ -25,12 +25,17 @@ import { parseDblabOptions, runDblabDeploy } from "./deploy-dblab";
 import { isExpandChange, isContractChange } from "../expand-contract/phase-filter";
 import { ExpandContractTracker } from "../expand-contract/tracker";
 import { loadPlan } from "./shared";
+import { Analyzer } from "../analysis/index";
+import { defaultRegistry } from "../analysis/registry";
+import { allRules } from "../analysis/rules/index";
+import { formatText, computeSummary } from "../analysis/reporter";
 
 // ---------------------------------------------------------------------------
 // Exit codes (SPEC R6)
 // ---------------------------------------------------------------------------
 
 export const EXIT_DEPLOY_FAILED = 1;
+export const EXIT_ANALYSIS_FAILED = 2;
 export const EXIT_CONCURRENT_DEPLOY = 4;
 export const EXIT_LOCK_TIMEOUT = 5;
 export const EXIT_DB_UNREACHABLE = 10;
@@ -101,6 +106,12 @@ export interface DeployOptions {
   noSnapshot: boolean;
   /** Expand/contract phase filter: deploy only expand or contract migrations. */
   phase?: DeployPhase;
+  /** Skip static analysis before deploying scripts (R4). */
+  skipAnalysis: boolean;
+  /** Bypass all analysis errors (--force). */
+  force: boolean;
+  /** Bypass specific analysis rules (--force-rule SA003, repeatable). */
+  forceRules: string[];
 }
 
 /**
@@ -116,6 +127,9 @@ export function parseDeployOptions(args: ParsedArgs): DeployOptions {
   let noTui = false;
   let noSnapshot = false;
   let phase: DeployPhase | undefined;
+  let skipAnalysis = false;
+  let force = false;
+  const forceRules: string[] = [];
   const variables: Record<string, string> = {};
 
   const rest = args.rest;
@@ -214,6 +228,25 @@ export function parseDeployOptions(args: ParsedArgs): DeployOptions {
       i++;
       continue;
     }
+    if (token === "--skip-analysis") {
+      skipAnalysis = true;
+      i++;
+      continue;
+    }
+    if (token === "--force") {
+      force = true;
+      i++;
+      continue;
+    }
+    if (token === "--force-rule") {
+      const val = rest[++i];
+      if (!val || val.startsWith("-")) {
+        throw new Error("--force-rule requires a rule ID argument");
+      }
+      forceRules.push(val);
+      i++;
+      continue;
+    }
     // Positional: treat as target name
     if (!args.target && !args.dbUri) {
       // Could be a target name or URI
@@ -298,6 +331,9 @@ export function parseDeployOptions(args: ParsedArgs): DeployOptions {
     noTui,
     noSnapshot,
     phase,
+    skipAnalysis,
+    force,
+    forceRules,
   };
 }
 
@@ -345,6 +381,8 @@ export interface DeployResult {
   error?: string;
   /** Whether this was a dry-run. */
   dryRun: boolean;
+  /** Whether deploy was blocked by static analysis (R4). */
+  analysisBlocked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -588,6 +626,29 @@ export async function executeDeploy(
     // Build dependency name -> change_id map once (avoids O(C*N) rebuild per change)
     const dependencyMap = buildDependencyMap(allChanges);
 
+    // 8b. Initialize static analysis engine (R4)
+    let analyzer: Analyzer | undefined;
+    if (!options.skipAnalysis) {
+      for (const rule of allRules) {
+        if (!defaultRegistry.has(rule.id)) {
+          defaultRegistry.register(rule);
+        }
+      }
+      analyzer = new Analyzer(defaultRegistry);
+      await analyzer.ensureWasm();
+    }
+
+    // Build analysis config from project config + force-rule overrides.
+    // Convert SqleverAnalysisConfig (snake_case) to AnalysisConfig (camelCase).
+    const tomlAnalysis = config.analysis ?? {};
+    const analysisPgVersion = tomlAnalysis.pg_version
+      ? parseInt(String(tomlAnalysis.pg_version), 10)
+      : undefined;
+    const analysisSkip = [
+      ...(tomlAnalysis.skip ?? []),
+      ...options.forceRules,
+    ];
+
     // 9. Set up TUI progress dashboard
     const outputCfg = getConfig();
     const useTUI = shouldUseTUI({ noTui: options.noTui, quiet: outputCfg.quiet });
@@ -643,6 +704,50 @@ export async function executeDeploy(
       const scriptContent = scriptBytes.toString("utf-8");
       const autoCommit = isAutoCommit(scriptContent);
       const scriptHash = computeScriptHashFromBytes(scriptBytes);
+
+      // 10a. Static analysis gate (R4)
+      if (analyzer) {
+        const isTransactional = !autoCommit;
+        const findings = analyzer.analyzeSql(scriptContent, deployScript, {
+          config: {
+            skip: analysisSkip,
+            errorOnWarn: tomlAnalysis.error_on_warn,
+            maxAffectedRows: tomlAnalysis.max_affected_rows,
+            pgVersion: analysisPgVersion,
+          },
+          pgVersion: analysisPgVersion,
+          isTransactional,
+        });
+
+        if (findings.length > 0) {
+          const summary = computeSummary(findings);
+          const hasErrors = summary.errors > 0;
+
+          // Display findings
+          const useColors = process.stderr.isTTY ?? false;
+          const report = formatText(findings, deployScript, useColors);
+          process.stderr.write(report);
+
+          if (hasErrors && !options.force) {
+            progress.updateChange(change.name, "failed");
+            failedCount++;
+            progress.finish({
+              totalDeployed: deployedCount,
+              totalFailed: failedCount,
+              totalSkipped: 0,
+              elapsedMs: Date.now() - deployStartTime,
+            });
+            return {
+              deployed: deployedCount,
+              skipped: 0,
+              dryRun: false,
+              failedChange: change.name,
+              error: `Static analysis blocked deploy of "${change.name}": ${summary.errors} error(s) found`,
+              analysisBlocked: true,
+            };
+          }
+        }
+      }
 
       // Resolve lock_timeout for this script
       let effectiveLockTimeout: number | undefined = options.lockTimeout;
@@ -1092,6 +1197,9 @@ export async function runDeploy(args: ParsedArgs): Promise<number> {
   }, plan);
 
   if (result.error && !result.dryRun) {
+    if (result.analysisBlocked) {
+      return EXIT_ANALYSIS_FAILED;
+    }
     if (result.error === "Concurrent deploy detected") {
       return EXIT_CONCURRENT_DEPLOY;
     }
