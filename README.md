@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NikolayS/sqlever/actions/workflows/ci.yml/badge.svg)](https://github.com/NikolayS/sqlever/actions/workflows/ci.yml) [![npm version](https://img.shields.io/npm/v/sqlever)](https://www.npmjs.com/package/sqlever) [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE) [![Bun](https://img.shields.io/badge/bun-1.1%2B-orange.svg)](https://bun.sh)
 
-22 static analysis rules catch dangerous migration patterns -- table rewrites, missing lock timeouts, data loss, non-concurrent index builds -- before they hit production. Full Sqitch compatibility. Single binary. No Perl, no JVM.
+43 static analysis rules catch dangerous migration patterns -- table rewrites, missing lock timeouts, data loss, non-concurrent index builds -- before they hit production. Full Sqitch compatibility. Single binary. No Perl, no JVM.
 
 <!-- TODO: GIF demo rendered from demos/*.tape with https://github.com/charmbracelet/vhs -->
 
@@ -27,7 +27,7 @@
 
 ## Why sqlever
 
-- **Static analysis built in** -- 22 rules catch dangerous migration patterns (lock-heavy DDL, data loss, table rewrites) before deploy, with actionable fix suggestions for every finding.
+- **Static analysis built in** -- 43 rules catch dangerous migration patterns (lock-heavy DDL, data loss, table rewrites) before deploy, with actionable fix suggestions for every finding.
 - **Works with any migration tool** -- run `npx sqlever analyze` on Flyway, Rails, Alembic, or raw SQL files. Zero config, zero project setup.
 - **Sqitch compatible** -- drop-in CLI replacement. Existing `sqitch.plan` files, tracking schemas, and workflows work unchanged. Byte-identical change IDs verified by oracle tests.
 - **Machine-readable output** -- `--format json`, `--format github-annotations`, and `--format gitlab-codequality` for native CI integration.
@@ -95,7 +95,7 @@ sqlever's static analysis works standalone -- no `sqitch.plan` needed, no projec
   run: npx sqlever analyze sql/ --format github-annotations
 ```
 
-Keep Flyway for execution. Add sqlever for safety. 22 rules catch dangerous patterns Flyway cannot see.
+Keep Flyway for execution. Add sqlever for safety. 43 rules catch dangerous patterns Flyway cannot see.
 
 ### For Liquibase users
 
@@ -235,7 +235,7 @@ This ensures that deploying historical migrations on a fresh database produces t
 
 ### Static analysis at deploy time
 
-`sqlever deploy` runs all 22 analysis rules before executing SQL and blocks on error-severity findings. Run standalone with `sqlever analyze` against any `.sql` file or directory -- no `sqitch.plan` required. See the full [analysis rules table](#analysis-rules) below.
+`sqlever deploy` runs all 43 analysis rules before executing SQL and blocks on error-severity findings. Run standalone with `sqlever analyze` against any `.sql` file or directory -- no `sqitch.plan` required. See the full [analysis rules table](#analysis-rules) below.
 
 ### Expand/contract migrations
 
@@ -326,7 +326,7 @@ The following Sqitch commands are recognized but not yet implemented: `rebase`, 
 
 ## Analysis rules
 
-`sqlever analyze` runs 22 rules against your migration SQL. Rules are classified as **static** (SQL-only, no database connection needed), **connected** (requires live database), or **hybrid** (static check always runs; connected check refines when a database is available).
+`sqlever analyze` runs 43 rules against your migration SQL. Rules are classified as **static** (SQL-only, no database connection needed), **connected** (requires live database), or **hybrid** (static check always runs; connected check refines when a database is available).
 
 | Rule | Severity | Type | Description |
 |------|----------|------|-------------|
@@ -352,6 +352,27 @@ The following Sqitch commands are recognized but not yet implemented: `rebase`, 
 | SA019 | warn | static | `REINDEX` without `CONCURRENTLY` -- takes `AccessExclusiveLock` |
 | SA020 | error | static | `CONCURRENTLY` inside transactional deploy -- fails at runtime |
 | SA021 | warn | static | `LOCK TABLE` -- explicit locking is a code smell in migrations |
+| SA022 | error | static | `DROP SCHEMA` -- destroys all objects in the schema (exempt in revert scripts) |
+| SA023 | error | static | `DROP DATABASE` -- irreversible destruction of the entire database |
+| SA024 | error | static | `DROP ... CASCADE` -- silently destroys dependent objects |
+| SA025 | warn | static | `BEGIN` / `START TRANSACTION` inside a migration -- likely a bug, runner already wraps in a transaction |
+| SA026 | warn | static | Missing `SET statement_timeout` before long-running DML (`UPDATE`, `DELETE`, `INSERT ... SELECT`) |
+| SA027 | warn | static | `ALTER COLUMN ... DROP NOT NULL` -- may break application assumptions |
+| SA028 | warn | static | `TRUNCATE ... CASCADE` -- cascades to all referencing tables |
+| SA029 | info | static | `serial` / `bigserial` / `smallserial` column type -- prefer IDENTITY columns (default: off) |
+| SA030 | warn | static | `ADD UNIQUE` constraint or `CREATE UNIQUE INDEX` -- may fail if duplicates exist |
+| SA031 | error | static | `ALTER TYPE ... ADD VALUE` inside a transaction on PG < 12 -- fails at runtime |
+| SA032 | warn | static | `BEGIN` without `COMMIT` or `ROLLBACK` -- transaction left open |
+| SA033 | info | connected | Missing index on foreign key referencing column -- causes sequential scans on referenced table |
+| SA034 | info | static | `CREATE INDEX CONCURRENTLY` can silently produce an INVALID index -- verify `pg_index.indisvalid` |
+| SA035 | warn | static | `DROP PRIMARY KEY` constraint -- may break logical replication replica identity |
+| SA036 | warn | connected | Large `UPDATE` / `INSERT ... SELECT` without batching -- consider `sqlever batch` |
+| SA037 | info | static | `int4` / `integer` primary key -- limited to ~2.1 billion values, prefer `bigint` |
+| SA038 | info | static | `varchar(n)` column type -- prefer `text` with a CHECK constraint if length limit is needed |
+| SA039 | info | static | `int4` / `int2` primary key column -- prefer `bigint` to avoid capacity issues |
+| SA040 | info | static | `serial` / `bigserial` / `smallserial` column type -- prefer `GENERATED ALWAYS AS IDENTITY` |
+| SA041 | info | static | `timestamp` without time zone -- prefer `timestamptz` to avoid timezone bugs |
+| SA042 | info | static | `CREATE` / `DROP` without `IF NOT EXISTS` / `IF EXISTS` -- prefer idempotent migrations |
 
 ### Suppressing rules
 
@@ -431,7 +452,7 @@ Returns structured output:
   "version": 1,
   "metadata": {
     "files_analyzed": 1,
-    "rules_checked": 22,
+    "rules_checked": 43,
     "duration_ms": 2
   },
   "findings": [
@@ -452,7 +473,7 @@ Returns structured output:
 | | sqlever | Sqitch | Atlas | Flyway | dbmate |
 |---|---------|--------|-------|--------|--------|
 | Migration style | Imperative (plain SQL) | Imperative (plain SQL) | Declarative + versioned | Sequential numbered files | Sequential numbered files |
-| Static analysis | 22 rules, built in | None | ~12 rules (Pro edition) | None | None |
+| Static analysis | 43 rules, built in | None | ~12 rules (Pro edition) | None | None |
 | CI annotations | GitHub + GitLab native | None | GitHub (Pro) | None | None |
 | Postgres depth | Advisory locks, PgBouncer detection, replication lag monitoring | Basic | Good | Basic | Basic |
 | Sqitch compatibility | Full | -- | None | None | None |
