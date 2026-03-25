@@ -9,7 +9,6 @@ import {
   findTagChangeIndex,
   formatDiffText,
   type DiffResult,
-  type DiffEntry,
 } from "../../src/commands/diff";
 import type { Plan, Change, Tag } from "../../src/plan/types";
 import { resetConfig } from "../../src/output";

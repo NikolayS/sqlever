@@ -8,7 +8,7 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { parsePlan, parseDependencies, PlanParseError } from "../../src/plan/parser";
+import { parsePlan, PlanParseError } from "../../src/plan/parser";
 import {
   computeChangeId,
   computeTagId,
@@ -17,13 +17,10 @@ import {
 } from "../../src/plan/types";
 import {
   parseSqitchConf,
-  confGet,
   confGetString,
   confGetBool,
   confGetAll,
   confListSubsections,
-  confGetSection,
-  serializeSqitchConf,
 } from "../../src/config/sqitch-conf";
 import { parseArgs } from "../../src/cli";
 
@@ -38,16 +35,6 @@ function minimalPlan(lines: string[] = []): string {
   return [
     "%syntax-version=1.0.0",
     "%project=testproject",
-    "",
-    ...lines,
-  ].join("\n");
-}
-
-function planWithUri(lines: string[] = []): string {
-  return [
-    "%syntax-version=1.0.0",
-    "%project=testproject",
-    "%uri=https://example.com/testproject",
     "",
     ...lines,
   ].join("\n");
@@ -651,10 +638,11 @@ describe("command flag parsing — parseArgs", () => {
     expect(args.help).toBe(true);
     expect(args.command).toBeUndefined();
 
-    const args2 = parseArgs(["deploy", "--help"]);
+    const helpArgs = parseArgs(["deploy", "--help"]);
     // --help is a global flag consumed by parseArgs, not passed to rest
     // Actually, looking at cli.ts, --help is handled BEFORE command dispatch
     // The parseArgs function sets args.help = true
+    expect(helpArgs.help).toBe(true);
   });
 
   it("15: --version / -V flag", () => {

@@ -11,7 +11,6 @@ import {
   writeFileSync,
   readFileSync,
   existsSync,
-  mkdirSync,
   rmSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -23,9 +22,7 @@ import { resetConfig } from "../../src/output";
 // ---------------------------------------------------------------------------
 
 import {
-  deriveChangeNames,
   syncTriggerName,
-  syncTriggerFunctionName,
   expandDeployTemplate,
   expandRevertTemplate,
   expandVerifyTemplate,
@@ -33,7 +30,6 @@ import {
   contractRevertTemplate,
   contractVerifyTemplate,
   parseExpandArgs,
-  validateExpandOptions,
   inferOperation,
   generateExpandContract,
   type ExpandContractConfig,
@@ -43,22 +39,12 @@ import {
   forwardSyncExpression,
   reverseSyncExpression,
   generateTriggerFunctionBody,
-  generateCreateFunction,
   generateCreateTrigger,
-  generateCreateSQL,
-  generateDropTrigger,
-  generateDropFunction,
-  generateDropSQL,
   generateSyncTrigger,
-  configToTriggerOptions,
-  validateTriggerOptions,
-  generateSyncTriggerSafe,
   type SyncTriggerOptions,
 } from "../../src/expand-contract/triggers";
 
 import {
-  isExpandChange,
-  isContractChange,
   isExpandContractChange,
   extractBaseName,
   expandChangeName,

@@ -42,7 +42,6 @@ mock.module("pg/lib/client", () => ({
 const { resolveTargetUri, withDatabase } = await import(
   "../../src/commands/shared"
 );
-const { DatabaseClient } = await import("../../src/db/client");
 
 // ---------------------------------------------------------------------------
 // Tests

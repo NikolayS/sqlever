@@ -73,7 +73,7 @@ mock.module("pg/lib/client", () => ({
 
 // Type imports (these work statically)
 import type { DeployOptions, DeployDeps } from "../../src/commands/deploy";
-import type { SpawnFn, PsqlRunResult } from "../../src/psql";
+import type { SpawnFn } from "../../src/psql";
 
 // Import after mocking
 const { DatabaseClient } = await import("../../src/db/client");
@@ -82,9 +82,7 @@ const {
   executeDeploy,
   runDeploy,
   parseDeployOptions,
-  projectLockKey,
   isAutoCommit,
-  ADVISORY_LOCK_NAMESPACE,
   EXIT_CONCURRENT_DEPLOY,
   EXIT_DEPLOY_FAILED,
   EXIT_LOCK_TIMEOUT,
@@ -163,7 +161,7 @@ add_index 2025-01-02T00:00:00Z Test User <test@example.com> # Concurrent index
 /**
  * Create a mock PsqlRunner that succeeds (exit code 0) for all scripts.
  */
-function createMockPsqlRunner(exitCode = 0, stderr = ""): PsqlRunner {
+function createMockPsqlRunner(exitCode = 0, stderr = ""): InstanceType<typeof PsqlRunner> {
   const mockSpawn: SpawnFn = (_cmd, _args, _opts) => {
     const child = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
@@ -181,7 +179,7 @@ function createMockPsqlRunner(exitCode = 0, stderr = ""): PsqlRunner {
 /**
  * Create a mock PsqlRunner that fails on a specific deploy script name.
  */
-function createFailingPsqlRunner(failOnScript: string, errorMsg = "ERROR: relation does not exist"): PsqlRunner {
+function createFailingPsqlRunner(failOnScript: string, errorMsg = "ERROR: relation does not exist"): InstanceType<typeof PsqlRunner> {
   const mockSpawn: SpawnFn = (_cmd, args, _opts) => {
     const child = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
@@ -204,7 +202,7 @@ function createFailingPsqlRunner(failOnScript: string, errorMsg = "ERROR: relati
  * Create a PsqlRunner that tracks invocations and fails on specific scripts.
  */
 function createTrackingPsqlRunner(failOnScripts: string[] = []): {
-  runner: PsqlRunner;
+  runner: InstanceType<typeof PsqlRunner>;
   calls: Array<{ scriptFile: string; args: string[] }>;
 } {
   const calls: Array<{ scriptFile: string; args: string[] }> = [];
@@ -249,7 +247,7 @@ async function createDeps(opts?: Partial<{
 }>): Promise<DeployDeps> {
   const db = new DatabaseClient("postgresql://localhost/testdb");
   const registry = new Registry(db);
-  let psqlRunner: PsqlRunner;
+  let psqlRunner: InstanceType<typeof PsqlRunner>;
   if (opts?.failOnScript) {
     psqlRunner = createFailingPsqlRunner(opts.failOnScript);
   } else {

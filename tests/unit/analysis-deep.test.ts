@@ -90,22 +90,6 @@ function silenceStdout(): () => void {
   };
 }
 
-// Capture stdout during test runs
-function captureStdout(): { getOutput: () => string; restore: () => void } {
-  let output = "";
-  const original = process.stdout.write.bind(process.stdout);
-  process.stdout.write = ((chunk: unknown) => {
-    output += typeof chunk === "string" ? chunk : String(chunk);
-    return true;
-  }) as typeof process.stdout.write;
-  return {
-    getOutput: () => output,
-    restore: () => {
-      process.stdout.write = original;
-    },
-  };
-}
-
 // Load WASM module and register rules before all tests
 beforeAll(async () => {
   await loadModule();

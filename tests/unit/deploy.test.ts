@@ -26,7 +26,7 @@ class MockPgClient {
     this.connected = true;
   }
 
-  async query(text: string, values?: unknown[]) {
+  async query(text: string, values?: unknown[]): Promise<{ rows: unknown[]; rowCount: number; command: string }> {
     this.queries.push({ text, values });
     // Default: advisory lock returns true
     if (text.includes("pg_try_advisory_lock")) {
@@ -66,8 +66,8 @@ mock.module("pg/lib/client", () => ({
 }));
 
 // Type imports (these work statically)
-import type { DeployOptions, DeployDeps, buildScriptNameMap as BuildScriptNameMapType } from "../../src/commands/deploy";
-import type { SpawnFn, PsqlRunResult } from "../../src/psql";
+import type { DeployOptions, DeployDeps } from "../../src/commands/deploy";
+import type { SpawnFn } from "../../src/psql";
 
 // Import after mocking
 const { DatabaseClient } = await import("../../src/db/client");
@@ -144,7 +144,7 @@ add_posts [add_users] 2025-01-04T00:00:00Z Test User <test@example.com> # Add po
 /**
  * Create a mock PsqlRunner that succeeds (exit code 0).
  */
-function createMockPsqlRunner(exitCode = 0, stderr = ""): PsqlRunner {
+function createMockPsqlRunner(exitCode = 0, stderr = ""): InstanceType<typeof PsqlRunner> {
   const mockSpawn: SpawnFn = (_cmd, _args, _opts) => {
     const child = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
@@ -162,7 +162,7 @@ function createMockPsqlRunner(exitCode = 0, stderr = ""): PsqlRunner {
 /**
  * Create a mock PsqlRunner that fails on a specific script.
  */
-function createFailingPsqlRunner(failOnScript: string, errorMsg = "ERROR: relation does not exist"): PsqlRunner {
+function createFailingPsqlRunner(failOnScript: string, errorMsg = "ERROR: relation does not exist"): InstanceType<typeof PsqlRunner> {
   const mockSpawn: SpawnFn = (_cmd, args, _opts) => {
     const child = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
@@ -199,7 +199,7 @@ function defaultOptions(dir: string): DeployOptions {
 async function createDeps(opts?: Partial<{ psqlExitCode: number; psqlStderr: string; failOnScript: string }>): Promise<DeployDeps> {
   const db = new DatabaseClient("postgresql://localhost/testdb");
   const registry = new Registry(db);
-  let psqlRunner: PsqlRunner;
+  let psqlRunner: InstanceType<typeof PsqlRunner>;
   if (opts?.failOnScript) {
     psqlRunner = createFailingPsqlRunner(opts.failOnScript);
   } else {
@@ -213,10 +213,6 @@ async function createDeps(opts?: Partial<{ psqlExitCode: number; psqlStderr: str
 
 function getPgClient(): MockPgClient {
   return mockInstances[mockInstances.length - 1]!;
-}
-
-function queryTexts(pgClient: MockPgClient): string[] {
-  return pgClient.queries.map((q) => q.text);
 }
 
 // ---------------------------------------------------------------------------

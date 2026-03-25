@@ -46,7 +46,6 @@ mock.module("pg/lib/client", () => ({
 
 const { DatabaseClient } = await import("../../src/db/client");
 const {
-  BatchQueue,
   DEFAULT_BATCH_SIZE,
   DEFAULT_SLEEP_MS,
   DEFAULT_MAX_RETRIES,
@@ -63,7 +62,6 @@ import type { BatchJob, PartitionId } from "../../src/batch/queue";
 import type {
   DmlExecutor,
   SignalCheckFn,
-  WorkerResult,
   BatchWorkerConfig,
 } from "../../src/batch/worker";
 
@@ -356,7 +354,7 @@ describe("batch/worker", () => {
       await worker.run();
 
       // The DML executor should have received "500" as the starting PK
-      expect(receivedLastPk).toBe("500");
+      expect(receivedLastPk as string | null).toBe("500");
     });
 
     it("passes updated lastPk to successive batch calls", async () => {
@@ -969,7 +967,7 @@ describe("batch/worker", () => {
 
       const signalCheck: SignalCheckFn = async () => {
         // Simulate async check (e.g., reading a file or querying DB)
-        return "cancel";
+        return "cancel" as const;
       };
 
       const dml = fixedDml([]);

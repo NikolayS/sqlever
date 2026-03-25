@@ -22,7 +22,7 @@ class MockPgClient {
     this.connected = true;
   }
 
-  async query(text: string, values?: unknown[]) {
+  async query(text: string, values?: unknown[]): Promise<{ rows: unknown[]; rowCount: number; command: string }> {
     this.queries.push({ text, values });
     return { rows: [], rowCount: 0, command: "SELECT" };
   }
@@ -47,7 +47,6 @@ const {
   buildRevertInput,
   confirmRevert,
   runRevert,
-  EXIT_CODE_CONCURRENT,
 } = await import("../../src/commands/revert");
 const { resolveTargetUri } = await import("../../src/commands/shared");
 const { parseArgs } = await import("../../src/cli");

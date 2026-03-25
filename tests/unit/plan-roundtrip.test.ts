@@ -13,7 +13,6 @@ import { tmpdir } from "node:os";
 import { parsePlan } from "../../src/plan/parser";
 import {
   serializePlan,
-  serializeChange,
   appendChange,
 } from "../../src/plan/writer";
 import { computeChangeId } from "../../src/plan/types";

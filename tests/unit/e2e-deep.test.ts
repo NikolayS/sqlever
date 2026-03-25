@@ -12,7 +12,6 @@ import {
   writeFileSync,
   readFileSync,
   rmSync,
-  existsSync,
   mkdtempSync,
 } from "fs";
 import { join } from "path";
@@ -150,15 +149,12 @@ mock.module("pg/lib/client", () => ({
 // ---------------------------------------------------------------------------
 
 import type { DeployOptions, DeployDeps } from "../../src/commands/deploy";
-import type { SpawnFn, PsqlRunResult } from "../../src/psql";
+import type { SpawnFn } from "../../src/psql";
 
 const { DatabaseClient } = await import("../../src/db/client");
 const { Registry } = await import("../../src/db/registry");
 const {
   executeDeploy,
-  projectLockKey,
-  isAutoCommit,
-  ADVISORY_LOCK_NAMESPACE,
   EXIT_CONCURRENT_DEPLOY,
   EXIT_DEPLOY_FAILED,
   EXIT_LOCK_TIMEOUT,
@@ -168,7 +164,7 @@ const { loadConfig } = await import("../../src/config/index");
 const { PsqlRunner } = await import("../../src/psql");
 const { ShutdownManager } = await import("../../src/signals");
 const { parsePlan } = await import("../../src/plan/parser");
-const { computeChangeId, computeTagId } = await import("../../src/plan/types");
+const { computeChangeId } = await import("../../src/plan/types");
 const {
   topologicalSort,
   validateDependencies,
@@ -180,24 +176,16 @@ const {
 const {
   shouldUseTUI,
   DeployProgress,
-  formatDuration,
 } = await import("../../src/tui/deploy");
 const {
-  parseIncludeDirective,
-  findIncludes,
-  resolveIncludePath,
   resolveIncludes,
-  getFileAtCommit,
-  getFileContent,
-  isGitRepo,
-  getGitRoot,
   resolveDeployIncludes,
 } = await import("../../src/includes/snapshot");
-const { runTag, isValidTagName, parseTagArgs } = await import("../../src/commands/tag");
+const { runTag } = await import("../../src/commands/tag");
 const { findReworkContext, ReworkError } = await import("../../src/commands/rework");
-const { computeChangesToRevert, buildRevertInput } = await import("../../src/commands/revert");
+const { computeChangesToRevert } = await import("../../src/commands/revert");
 const { computeStatus, formatStatusText } = await import("../../src/commands/status");
-const { runAnalyze, parseAnalyzeArgs } = await import("../../src/commands/analyze");
+const { runAnalyze } = await import("../../src/commands/analyze");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -235,7 +223,7 @@ function writeSqitchConf(dir: string, content: string): void {
   writeFileSync(join(dir, "sqitch.conf"), content, "utf-8");
 }
 
-function createMockPsqlRunner(exitCode = 0, stderr = ""): PsqlRunner {
+function createMockPsqlRunner(exitCode = 0, stderr = ""): InstanceType<typeof PsqlRunner> {
   const mockSpawn: SpawnFn = (_cmd, _args, _opts) => {
     const child = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
@@ -253,7 +241,7 @@ function createMockPsqlRunner(exitCode = 0, stderr = ""): PsqlRunner {
 function createFailingPsqlRunner(
   failOnScript: string,
   errorMsg = "ERROR: relation does not exist",
-): PsqlRunner {
+): InstanceType<typeof PsqlRunner> {
   const mockSpawn: SpawnFn = (_cmd, args, _opts) => {
     const child = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
@@ -294,7 +282,7 @@ async function createDeps(opts?: Partial<{
 }>): Promise<DeployDeps> {
   const db = new DatabaseClient("postgresql://localhost/testdb");
   const registry = new Registry(db);
-  let psqlRunner: PsqlRunner;
+  let psqlRunner: InstanceType<typeof PsqlRunner>;
   if (opts?.failOnScript) {
     psqlRunner = createFailingPsqlRunner(opts.failOnScript);
   } else {

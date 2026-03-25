@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { runDoctorChecks, type DoctorReport } from "../../src/commands/doctor";
+import { runDoctorChecks } from "../../src/commands/doctor";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -20,10 +20,6 @@ function createTempProject(): string {
 
 function writePlan(dir: string, content: string): void {
   writeFileSync(join(dir, "sqitch.plan"), content);
-}
-
-function writeConf(dir: string, content: string): void {
-  writeFileSync(join(dir, "sqitch.conf"), content);
 }
 
 function writeScript(dir: string, subdir: string, name: string, content: string): void {

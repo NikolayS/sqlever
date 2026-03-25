@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, spyOn, mock } from "bun:test";
-import { resetConfig, setConfig } from "../../src/output";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { resetConfig } from "../../src/output";
 
 // ---------------------------------------------------------------------------
 // Mock pg/lib/client — we never want a real database connection in unit tests.
@@ -71,24 +71,6 @@ const { DatabaseClient, EXIT_CODE_DB_UNREACHABLE } = await import(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function captureStderr() {
-  let output = "";
-  const spy = spyOn(process.stderr, "write").mockImplementation(
-    (chunk: string | Uint8Array) => {
-      output += String(chunk);
-      return true;
-    },
-  );
-  return {
-    get output() {
-      return output;
-    },
-    restore() {
-      spy.mockRestore();
-    },
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Tests

@@ -5,13 +5,9 @@
 //
 // Issue: NikolayS/sqlever#130
 
-import { describe, it, expect, beforeAll, beforeEach, afterEach, spyOn } from "bun:test";
-import { EventEmitter } from "events";
+import { describe, it, expect, beforeEach, spyOn } from "bun:test";
 import {
   mkdtempSync,
-  writeFileSync,
-  readFileSync,
-  mkdirSync,
   rmSync,
   symlinkSync,
 } from "node:fs";

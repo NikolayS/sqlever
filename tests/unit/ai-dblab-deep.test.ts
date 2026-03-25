@@ -19,7 +19,6 @@ import {
   callLLM,
   DEFAULT_MODELS,
   type ExplainConfig,
-  type LLMProvider as ExplainLLMProvider,
 } from "../../src/ai/explain";
 import { parseExplainArgs } from "../../src/commands/explain";
 import {
@@ -178,7 +177,7 @@ describe("LLM explain — deep tests", () => {
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
-    }) as typeof globalThis.fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     const config: ExplainConfig = {
       provider: "openai",
@@ -223,7 +222,7 @@ describe("LLM explain — deep tests", () => {
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
-    }) as typeof globalThis.fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     const config: ExplainConfig = {
       provider: "anthropic",
@@ -264,7 +263,7 @@ describe("LLM explain — deep tests", () => {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
-    }) as typeof globalThis.fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     const config: ExplainConfig = {
       provider: "ollama",
@@ -291,7 +290,7 @@ describe("LLM explain — deep tests", () => {
         JSON.stringify({ error: { message: "Invalid API key" } }),
         { status: 401 },
       );
-    }) as typeof globalThis.fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     const config: ExplainConfig = {
       provider: "openai",
@@ -310,7 +309,7 @@ describe("LLM explain — deep tests", () => {
   test("API 429: throws with rate limit status code", async () => {
     const mockFn = (async () => {
       return new Response("Rate limit exceeded", { status: 429 });
-    }) as typeof globalThis.fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     const config: ExplainConfig = {
       provider: "openai",
@@ -329,7 +328,7 @@ describe("LLM explain — deep tests", () => {
   test("API 500: throws with server error status", async () => {
     const mockFn = (async () => {
       return new Response("Internal Server Error", { status: 500 });
-    }) as typeof globalThis.fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     const config: ExplainConfig = {
       provider: "anthropic",
@@ -348,7 +347,7 @@ describe("LLM explain — deep tests", () => {
   test("Network error: fetch itself throws (e.g. DNS failure)", async () => {
     const mockFn = (async () => {
       throw new TypeError("fetch failed: getaddrinfo ENOTFOUND api.openai.com");
-    }) as typeof globalThis.fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     const config: ExplainConfig = {
       provider: "openai",
@@ -444,7 +443,7 @@ describe("LLM explain — deep tests", () => {
     // Ollama without key does NOT throw (it makes a network call, so we mock it)
     const mockFn = (async () => {
       return new Response(JSON.stringify({ response: "ok" }), { status: 200 });
-    }) as typeof globalThis.fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     const result = await callLLM(
       "test",
