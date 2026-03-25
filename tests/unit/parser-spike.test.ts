@@ -439,9 +439,9 @@ describe("libpg-query WASM parser spike", () => {
       }
 
       times.sort((a, b) => a - b);
-      const median = times[Math.floor(times.length / 2)];
-      const min = times[0];
-      const max = times[times.length - 1];
+      const median = times[Math.floor(times.length / 2)]!;
+      const min = times[0]!;
+      const max = times[times.length - 1]!;
 
       console.log(
         `\n  Parse benchmark (1000-line SQL, ${iterations} runs):`,
@@ -478,9 +478,9 @@ describe("libpg-query WASM parser spike", () => {
       }
 
       times.sort((a, b) => a - b);
-      const median = times[Math.floor(times.length / 2)];
-      const min = times[0];
-      const max = times[times.length - 1];
+      const median = times[Math.floor(times.length / 2)]!;
+      const min = times[0]!;
+      const max = times[times.length - 1]!;
 
       console.log(
         `\n  parseSync benchmark (1000-line SQL, ${iterations} runs):`,

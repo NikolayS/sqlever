@@ -178,18 +178,11 @@ const SINGLE_CHANGE_PLAN = `%syntax-version=1.0.0
 create_schema 2025-01-01T00:00:00Z Test User <test@example.com> # Create schema
 `;
 
-const TWO_CHANGE_PLAN = `%syntax-version=1.0.0
-%project=myproject
-
-create_schema 2025-01-01T00:00:00Z Test User <test@example.com> # Create schema
-add_users [create_schema] 2025-01-02T00:00:00Z Test User <test@example.com> # Add users table
-`;
-
 /**
  * Create a tracking PsqlRunner that records calls and their arguments/content.
  */
 function createTrackingPsqlRunner(failOnScripts: string[] = []): {
-  runner: PsqlRunner;
+  runner: InstanceType<typeof PsqlRunner>;
   calls: Array<{ scriptFile: string; args: string[]; content?: string }>;
 } {
   const calls: Array<{ scriptFile: string; args: string[]; content?: string }> = [];

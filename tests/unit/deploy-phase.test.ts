@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { EventEmitter } from "events";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { resetConfig, setConfig } from "../../src/output";
@@ -40,7 +40,7 @@ class MockPgClient {
     this.connected = true;
   }
 
-  async query(text: string, values?: unknown[]) {
+  async query(text: string, values?: unknown[]): Promise<{ rows: unknown[]; rowCount: number; command: string }> {
     this.queries.push({ text, values });
     // Advisory lock
     if (text.includes("pg_try_advisory_lock")) {
@@ -125,7 +125,6 @@ mock.module("pg/lib/client", () => ({
 }));
 
 // Type imports
-import type { DeployOptions, DeployDeps, DeployPhase } from "../../src/commands/deploy";
 import type { SpawnFn } from "../../src/psql";
 
 // Import after mocking
@@ -602,7 +601,7 @@ describe("executeDeploy --phase contract", () => {
     setupProject(tmpDir);
 
     // Mock: expand change is already deployed
-    const mockQuery = async (text: string, values?: unknown[]) => {
+    const mockQuery = async (text: string, _values?: unknown[]) => {
       if (text.includes("pg_try_advisory_lock")) {
         return { rows: [{ pg_try_advisory_lock: true }], rowCount: 1, command: "SELECT" };
       }

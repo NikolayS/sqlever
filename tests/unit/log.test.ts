@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, spyOn, mock } from "bun:test";
-import { resetConfig, setConfig } from "../../src/output";
+import { resetConfig } from "../../src/output";
+import type { Event } from "../../src/db/registry";
 
 // ---------------------------------------------------------------------------
 // Mock pg/lib/client — same approach as registry.test.ts
@@ -100,7 +101,7 @@ function captureWrites() {
 }
 
 // Sample event data
-function makeSampleEvent(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+function makeSampleEvent(overrides: Partial<Event> = {}): Event {
   return {
     event: "deploy",
     change_id: "abc123",

@@ -36,7 +36,7 @@ import {
   hasPg,
 } from "./helpers";
 import { parsePlan } from "../../src/plan/parser";
-import type { Plan, Change } from "../../src/plan/types";
+import type { Plan } from "../../src/plan/types";
 
 // ---------------------------------------------------------------------------
 // Paths

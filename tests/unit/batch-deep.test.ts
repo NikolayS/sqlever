@@ -21,7 +21,7 @@ class MockPgClient {
     this.connected = true;
   }
 
-  async query(text: string, values?: unknown[]) {
+  async query(text: string, values?: unknown[]): Promise<{ rows: unknown[]; rowCount: number; command: string }> {
     this.queries.push({ text, values });
     return { rows: [], rowCount: 0, command: "SELECT" };
   }
@@ -44,7 +44,6 @@ const {
   splitStatements,
   isValidTransition,
   VALID_TRANSITIONS,
-  PARTITION_COUNT,
   DEFAULT_HEARTBEAT_STALENESS_MS,
   DEFAULT_BATCH_SIZE,
   DEFAULT_SLEEP_MS,
@@ -53,29 +52,19 @@ const {
 
 const {
   BatchWorker,
-  DEFAULT_LOCK_TIMEOUT_MS,
-  DEFAULT_STATEMENT_TIMEOUT_MS,
-  DEFAULT_SEARCH_PATH,
 } = await import("../../src/batch/worker");
 
 const {
   calculateProgress,
-  parseIntervalToSeconds,
   computeDeadTupleRatio,
-  checkHeartbeatStaleness,
   ProgressMonitor,
-  DEFAULT_REPLICATION_LAG_THRESHOLD_SECONDS,
-  DEFAULT_MAX_DEAD_TUPLE_RATIO,
 } = await import("../../src/batch/progress");
 
 const {
   parseBatchAddArgs,
-  parseBatchNameArgs,
-  parseSleepValue,
   formatJobText,
   formatJobListText,
   formatJobJson,
-  BATCH_SUBCOMMANDS,
 } = await import("../../src/commands/batch");
 
 import type {
@@ -87,7 +76,6 @@ import type {
 import type {
   DmlExecutor,
   SignalCheckFn,
-  WorkerResult,
 } from "../../src/batch/worker";
 
 // ---------------------------------------------------------------------------
@@ -398,10 +386,6 @@ describe("batch-deep", () => {
     });
 
     it("all invalid transitions rejected — disallowed pairs return false", () => {
-      const allStatuses: JobStatus[] = [
-        "pending", "running", "paused", "done", "failed", "dead", "cancelled",
-      ];
-
       const invalid: [JobStatus, JobStatus][] = [
         ["pending", "done"],
         ["pending", "failed"],
@@ -778,7 +762,6 @@ describe("batch-deep", () => {
       const client = await makeClient();
       const pgClient = latestPgClient();
 
-      const pausedJob = mockJob({ status: "paused" });
       const resumedJob = mockJob({ status: "running" });
 
       setupQueryResponses(pgClient, [

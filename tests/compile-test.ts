@@ -5,8 +5,6 @@
  * the WASM parser works in the compiled output.
  */
 import { parse, parseSync, loadModule } from "libpg-query";
-import { readFileSync } from "fs";
-import { join, dirname } from "path";
 
 async function main() {
   console.log("=== bun build --compile parser test ===\n");
@@ -87,11 +85,11 @@ async function main() {
   const times: number[] = [];
   for (let i = 0; i < 5; i++) {
     const start = performance.now();
-    const r = await parse(largeSql);
+    await parse(largeSql);
     times.push(performance.now() - start);
   }
   times.sort((a, b) => a - b);
-  const median = times[Math.floor(times.length / 2)];
+  const median = times[Math.floor(times.length / 2)]!;
   console.log(`   SQL length: ${largeSql.length} chars, ${largeSql.split("\n").length} lines`);
   console.log(`   Median parse time: ${median.toFixed(2)}ms`);
   console.log(`   ${median < 200 ? "PASS" : "FAIL"}: ${median < 200 ? "< 200ms target met" : "> 200ms target exceeded"}`);

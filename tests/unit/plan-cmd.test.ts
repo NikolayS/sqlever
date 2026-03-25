@@ -19,7 +19,7 @@ import {
 } from "../../src/commands/plan";
 import type { PlanOptions } from "../../src/commands/plan";
 import { parsePlan } from "../../src/plan/parser";
-import type { Plan, Change, Tag } from "../../src/plan/types";
+import type { Plan } from "../../src/plan/types";
 import { resetConfig, setConfig } from "../../src/output";
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, mock, afterEach, spyOn } from "bun:test";
 import { EventEmitter } from "events";
-import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { resetConfig, setConfig } from "../../src/output";
@@ -32,7 +32,7 @@ class MockPgClient {
     this.connected = true;
   }
 
-  async query(text: string, values?: unknown[]) {
+  async query(text: string, values?: unknown[]): Promise<{ rows: unknown[]; rowCount: number; command: string }> {
     this.queries.push({ text, values });
     // Default: advisory lock returns true
     if (text.includes("pg_try_advisory_lock")) {
@@ -80,14 +80,10 @@ const { DatabaseClient, EXIT_CODE_DB_UNREACHABLE } = await import("../../src/db/
 const { Registry } = await import("../../src/db/registry");
 const {
   executeDeploy,
-  runDeploy,
+  parseDeployOptions,
   projectLockKey,
   isAutoCommit,
-  parseDeployOptions,
   ADVISORY_LOCK_NAMESPACE,
-  EXIT_CONCURRENT_DEPLOY,
-  EXIT_DEPLOY_FAILED,
-  EXIT_LOCK_TIMEOUT,
   EXIT_DB_UNREACHABLE,
 } = await import("../../src/commands/deploy");
 const {
@@ -96,14 +92,12 @@ const {
   buildRevertInput,
   confirmRevert,
   runRevert,
-  EXIT_CODE_CONCURRENT,
 } = await import("../../src/commands/revert");
 const { loadConfig } = await import("../../src/config/index");
 const { PsqlRunner } = await import("../../src/psql");
 const { ShutdownManager } = await import("../../src/signals");
 const { parseArgs } = await import("../../src/cli");
 const {
-  shouldSetLockTimeout,
   isLockTimeoutError,
   retryWithBackoff,
 } = await import("../../src/lock-guard");
@@ -133,14 +127,6 @@ function writeDeployScript(dir: string, name: string, content: string): void {
   writeFileSync(join(dir, "deploy", `${name}.sql`), content, "utf-8");
 }
 
-function writeRevertScript(dir: string, name: string, content: string): void {
-  writeFileSync(join(dir, "revert", `${name}.sql`), content, "utf-8");
-}
-
-function writeVerifyScript(dir: string, name: string, content: string): void {
-  writeFileSync(join(dir, "verify", `${name}.sql`), content, "utf-8");
-}
-
 function writeSqitchConf(dir: string, content: string): void {
   writeFileSync(join(dir, "sqitch.conf"), content, "utf-8");
 }
@@ -162,16 +148,6 @@ add_users [create_schema] 2025-01-02T00:00:00Z Test User <test@example.com> # Ad
 add_posts [add_users] 2025-01-03T00:00:00Z Test User <test@example.com> # Add posts table
 `;
 
-/** Tagged plan */
-const TAGGED_PLAN = `%syntax-version=1.0.0
-%project=myproject
-
-create_schema 2025-01-01T00:00:00Z Test User <test@example.com> # Create schema
-add_users [create_schema] 2025-01-02T00:00:00Z Test User <test@example.com> # Add users table
-@v1.0 2025-01-03T00:00:00Z Test User <test@example.com> # Release v1.0
-add_posts [add_users] 2025-01-04T00:00:00Z Test User <test@example.com> # Add posts table
-`;
-
 /** Non-transactional plan */
 const NON_TXN_PLAN = `%syntax-version=1.0.0
 %project=myproject
@@ -180,7 +156,7 @@ create_schema 2025-01-01T00:00:00Z Test User <test@example.com> # Schema
 add_index 2025-01-02T00:00:00Z Test User <test@example.com> # Concurrent index
 `;
 
-function createMockPsqlRunner(exitCode = 0, stderr = ""): PsqlRunner {
+function createMockPsqlRunner(exitCode = 0, stderr = ""): InstanceType<typeof PsqlRunner> {
   const mockSpawn: SpawnFn = (_cmd, _args, _opts) => {
     const child = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
@@ -195,7 +171,7 @@ function createMockPsqlRunner(exitCode = 0, stderr = ""): PsqlRunner {
   return new PsqlRunner("psql", mockSpawn);
 }
 
-function createFailingPsqlRunner(failOnScript: string, errorMsg = "ERROR: relation does not exist"): PsqlRunner {
+function createFailingPsqlRunner(failOnScript: string, errorMsg = "ERROR: relation does not exist"): InstanceType<typeof PsqlRunner> {
   const mockSpawn: SpawnFn = (_cmd, args, _opts) => {
     const child = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
@@ -215,7 +191,7 @@ function createFailingPsqlRunner(failOnScript: string, errorMsg = "ERROR: relati
 }
 
 function createTrackingPsqlRunner(failOnScripts: string[] = []): {
-  runner: PsqlRunner;
+  runner: InstanceType<typeof PsqlRunner>;
   calls: Array<{ scriptFile: string; args: string[] }>;
 } {
   const calls: Array<{ scriptFile: string; args: string[] }> = [];
@@ -260,7 +236,7 @@ async function createDeps(opts?: Partial<{
 }>): Promise<DeployDeps> {
   const db = new DatabaseClient("postgresql://localhost/testdb");
   const registry = new Registry(db);
-  let psqlRunner: PsqlRunner;
+  let psqlRunner: InstanceType<typeof PsqlRunner>;
   if (opts?.failOnScript) {
     psqlRunner = createFailingPsqlRunner(opts.failOnScript);
   } else {
@@ -1003,11 +979,7 @@ create_schema 2025-01-01T00:00:00Z Test User <test@example.com> # Schema
     });
 
     it("runRevert returns exit code (no process.exit)", async () => {
-      // Verify revert.ts source does not call process.exit()
-      const srcPath = join(
-        testDir, "..", "..", "..", "src", "commands", "revert.ts",
-      );
-      // Use a more reliable approach: check the actual module behavior
+      // Verify revert.ts does not call process.exit() — check the actual module behavior
       const args = parseArgs(["revert", "-y", "--top-dir", "/tmp/__nonexistent_sqlever_dir_robustness__"]);
 
       const exitSpy = spyOn(process, "exit").mockImplementation(
