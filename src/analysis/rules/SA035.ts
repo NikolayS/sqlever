@@ -33,6 +33,7 @@ function isPkConstraintName(name: string): boolean {
 
 export const SA035: Rule = {
   id: "SA035",
+  name: "drop-primary-key",
   severity: "warn",
   type: "static",
 

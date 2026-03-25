@@ -27,6 +27,7 @@ const INT4_TYPES = new Set(["int4", "integer", "int", "serial"]);
 
 export const SA037: Rule = {
   id: "SA037",
+  name: "int-pk-capacity",
   severity: "info",
   type: "static",
 

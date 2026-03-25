@@ -15,6 +15,7 @@ import { offsetToLocation, node } from "../types.js";
 
 export const SA023: Rule = {
   id: "SA023",
+  name: "drop-database",
   severity: "error",
   type: "static",
 

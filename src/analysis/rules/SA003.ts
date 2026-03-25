@@ -48,6 +48,7 @@ function isSafeCast(_targetTypeName: TypeName | Record<string, unknown> | undefi
 
 export const SA003: Rule = {
   id: "SA003",
+  name: "alter-column-type",
   severity: "error",
   type: "static",
 

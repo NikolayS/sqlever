@@ -78,6 +78,7 @@ function isLongRunningDML(
 
 export const SA026: Rule = {
   id: "SA026",
+  name: "missing-statement-timeout",
   severity: "warn",
   type: "static",
 

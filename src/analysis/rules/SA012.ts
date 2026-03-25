@@ -15,6 +15,7 @@ import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA012: Rule = {
   id: "SA012",
+  name: "alter-sequence-restart",
   severity: "info",
   type: "static",
 

@@ -18,6 +18,7 @@ import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA024: Rule = {
   id: "SA024",
+  name: "drop-cascade",
   severity: "error",
   type: "static",
 

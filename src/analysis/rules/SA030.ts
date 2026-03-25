@@ -19,6 +19,7 @@ import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA030: Rule = {
   id: "SA030",
+  name: "add-unique-constraint",
   severity: "warn",
   type: "static",
 

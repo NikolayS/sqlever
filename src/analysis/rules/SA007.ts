@@ -16,6 +16,7 @@ import { extractDropObjectNames } from "../ast-helpers.js";
 
 export const SA007: Rule = {
   id: "SA007",
+  name: "drop-table",
   severity: "error",
   type: "static",
 

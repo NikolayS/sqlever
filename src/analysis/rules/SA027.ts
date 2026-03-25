@@ -15,6 +15,7 @@ import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA027: Rule = {
   id: "SA027",
+  name: "drop-not-null",
   severity: "warn",
   type: "static",
 

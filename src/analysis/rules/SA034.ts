@@ -18,6 +18,7 @@ import { offsetToLocation, node } from "../types.js";
 
 export const SA034: Rule = {
   id: "SA034",
+  name: "concurrently-index-validity",
   severity: "info",
   type: "static",
 

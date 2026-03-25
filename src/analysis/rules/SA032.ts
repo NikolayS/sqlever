@@ -14,6 +14,7 @@ import { offsetToLocation, node } from "../types.js";
 
 export const SA032: Rule = {
   id: "SA032",
+  name: "begin-without-commit",
   severity: "warn",
   type: "static",
 

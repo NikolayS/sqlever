@@ -11,9 +11,10 @@
 //   UPDATE users SET tier = 'free'; -- sqlever:disable SA010
 //
 // Rules:
-// - Comma-separated rule IDs: -- sqlever:disable SA010,SA011
+// - Comma-separated rule IDs or names: -- sqlever:disable SA010,dml-without-where
+// - Human-readable kebab-case names are resolved to rule IDs
 // - "all" keyword is NOT supported (too dangerous)
-// - Unknown rule IDs produce warnings
+// - Unknown rule IDs/names produce warnings
 // - Unclosed blocks extend to EOF and produce a warning
 // - Unused suppressions produce warnings
 
@@ -52,11 +53,12 @@ export interface SuppressionRange {
 /**
  * Regex for suppression comments.
  * Matches: -- sqlever:disable SA001,SA002
+ *          -- sqlever:disable add-column-not-null
  *          -- sqlever:enable SA001
- * Captures: [1] = "disable" | "enable", [2] = comma-separated rule IDs
+ * Captures: [1] = "disable" | "enable", [2] = comma-separated rule IDs or names
  */
 const SUPPRESSION_RE =
-  /--\s*sqlever:(disable|enable)\s+([\w,\s]+)/;
+  /--\s*sqlever:(disable|enable)\s+([\w\-,\s]+)/;
 
 /**
  * Parse all suppression directives from the raw SQL text.
@@ -117,6 +119,9 @@ function isSingleLineDirective(
 /**
  * Resolve suppression directives into line ranges.
  *
+ * Accepts both numeric rule IDs (SA001) and human-readable names
+ * (add-column-not-null). Names are resolved to IDs via the nameToId map.
+ *
  * Returns:
  * - An array of SuppressionRange objects
  * - An array of warning findings for issues like unknown rules, unclosed blocks
@@ -127,28 +132,38 @@ export function resolveSuppressionRanges(
   totalLines: number,
   knownRuleIds: Set<string>,
   filePath: string,
+  nameToId?: Map<string, string>,
 ): { ranges: SuppressionRange[]; warnings: Finding[] } {
   const ranges: SuppressionRange[] = [];
   const warnings: Finding[] = [];
+  const resolvedNameToId = nameToId ?? new Map<string, string>();
 
   // Track open blocks per rule ID: ruleId -> opening directive
   const openBlocks = new Map<string, SuppressionDirective>();
 
   for (const directive of directives) {
-    // Warn about unknown rule IDs
-    for (const ruleId of directive.ruleIds) {
-      if (!knownRuleIds.has(ruleId)) {
+    // Resolve names to IDs in the directive's ruleIds
+    const resolvedIds = directive.ruleIds.map((idOrName) => {
+      const resolved = resolvedNameToId.get(idOrName);
+      return resolved ?? idOrName;
+    });
+
+    // Warn about unknown rule IDs/names
+    for (let i = 0; i < directive.ruleIds.length; i++) {
+      const resolved = resolvedIds[i]!;
+      const original = directive.ruleIds[i]!;
+      if (!knownRuleIds.has(resolved)) {
         warnings.push({
           ruleId: "suppression",
           severity: "warn",
-          message: `Unknown rule ID "${ruleId}" in suppression comment.`,
+          message: `Unknown rule ID "${original}" in suppression comment.`,
           location: { file: filePath, line: directive.line, column: 1 },
         });
       }
     }
 
     // Warn about "all" keyword
-    if (directive.ruleIds.includes("all")) {
+    if (resolvedIds.includes("all")) {
       warnings.push({
         ruleId: "suppression",
         severity: "warn",
@@ -160,7 +175,7 @@ export function resolveSuppressionRanges(
 
     if (isSingleLineDirective(directive, sqlLines)) {
       // Single-line form: suppresses findings on THIS line only
-      for (const ruleId of directive.ruleIds) {
+      for (const ruleId of resolvedIds) {
         ranges.push({
           ruleId,
           startLine: directive.line,
@@ -171,12 +186,12 @@ export function resolveSuppressionRanges(
       }
     } else if (directive.action === "disable") {
       // Block form: open a suppression block
-      for (const ruleId of directive.ruleIds) {
+      for (const ruleId of resolvedIds) {
         openBlocks.set(ruleId, directive);
       }
     } else {
       // enable: close any matching open blocks
-      for (const ruleId of directive.ruleIds) {
+      for (const ruleId of resolvedIds) {
         const openDirective = openBlocks.get(ruleId);
         if (openDirective) {
           ranges.push({

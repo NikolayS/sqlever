@@ -346,3 +346,185 @@ describe("filterFindings", () => {
     expect(warnings[0]!.message).toContain("Unknown rule ID");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Name-based suppression
+// ---------------------------------------------------------------------------
+
+describe("name-based suppression", () => {
+  const knownRules = new Set(["SA001", "SA010", "SA011"]);
+  const nameToId = new Map([
+    ["add-column-not-null", "SA001"],
+    ["dml-without-where", "SA010"],
+    ["dml-on-large-table", "SA011"],
+  ]);
+
+  describe("parseSuppressions with rule names", () => {
+    test("parses a disable directive using a rule name", () => {
+      const sql = "-- sqlever:disable add-column-not-null\nSELECT 1;";
+      const directives = parseSuppressions(sql);
+      expect(directives).toHaveLength(1);
+      expect(directives[0]!.action).toBe("disable");
+      expect(directives[0]!.ruleIds).toEqual(["add-column-not-null"]);
+    });
+
+    test("parses mixed IDs and names", () => {
+      const sql = "-- sqlever:disable SA010,add-column-not-null";
+      const directives = parseSuppressions(sql);
+      expect(directives).toHaveLength(1);
+      expect(directives[0]!.ruleIds).toEqual(["SA010", "add-column-not-null"]);
+    });
+
+    test("parses enable directive with a rule name", () => {
+      const sql = "SELECT 1;\n-- sqlever:enable dml-without-where";
+      const directives = parseSuppressions(sql);
+      expect(directives).toHaveLength(1);
+      expect(directives[0]!.action).toBe("enable");
+      expect(directives[0]!.ruleIds).toEqual(["dml-without-where"]);
+    });
+  });
+
+  describe("resolveSuppressionRanges with rule names", () => {
+    test("resolves block form using rule name", () => {
+      const sql = [
+        "-- sqlever:disable dml-without-where",
+        "UPDATE users SET tier = 'free';",
+        "-- sqlever:enable dml-without-where",
+      ].join("\n");
+
+      const directives = parseSuppressions(sql);
+      const sqlLines = sql.split("\n");
+      const { ranges, warnings } = resolveSuppressionRanges(
+        directives,
+        sqlLines,
+        sqlLines.length,
+        knownRules,
+        FILE,
+        nameToId,
+      );
+
+      expect(ranges).toHaveLength(1);
+      expect(ranges[0]!.ruleId).toBe("SA010");
+      expect(ranges[0]!.startLine).toBe(1);
+      expect(ranges[0]!.endLine).toBe(3);
+      expect(warnings).toHaveLength(0);
+    });
+
+    test("resolves single-line form using rule name", () => {
+      const sql =
+        "UPDATE users SET tier = 'free'; -- sqlever:disable dml-without-where";
+      const directives = parseSuppressions(sql);
+      const sqlLines = sql.split("\n");
+      const { ranges } = resolveSuppressionRanges(
+        directives,
+        sqlLines,
+        sqlLines.length,
+        knownRules,
+        FILE,
+        nameToId,
+      );
+
+      expect(ranges).toHaveLength(1);
+      expect(ranges[0]!.ruleId).toBe("SA010");
+      expect(ranges[0]!.startLine).toBe(1);
+      expect(ranges[0]!.endLine).toBe(1);
+    });
+
+    test("resolves mixed IDs and names in same directive", () => {
+      const sql = [
+        "-- sqlever:disable SA011,dml-without-where",
+        "UPDATE users SET tier = 'free';",
+        "-- sqlever:enable SA011,dml-without-where",
+      ].join("\n");
+
+      const directives = parseSuppressions(sql);
+      const sqlLines = sql.split("\n");
+      const { ranges, warnings } = resolveSuppressionRanges(
+        directives,
+        sqlLines,
+        sqlLines.length,
+        knownRules,
+        FILE,
+        nameToId,
+      );
+
+      expect(ranges).toHaveLength(2);
+      const ruleIds = ranges.map((r) => r.ruleId).sort();
+      expect(ruleIds).toEqual(["SA010", "SA011"]);
+      expect(warnings).toHaveLength(0);
+    });
+
+    test("warns on unknown rule name", () => {
+      const sql = "-- sqlever:disable unknown-rule-name\nSELECT 1;";
+      const directives = parseSuppressions(sql);
+      const sqlLines = sql.split("\n");
+      const { warnings } = resolveSuppressionRanges(
+        directives,
+        sqlLines,
+        sqlLines.length,
+        knownRules,
+        FILE,
+        nameToId,
+      );
+
+      const unknownWarnings = warnings.filter((w) =>
+        w.message.includes("Unknown rule ID"),
+      );
+      expect(unknownWarnings.length).toBeGreaterThan(0);
+      expect(unknownWarnings[0]!.message).toContain("unknown-rule-name");
+    });
+
+    test("name-based suppression filters findings correctly", () => {
+      const sql = [
+        "-- sqlever:disable dml-without-where",
+        "UPDATE users SET tier = 'free';",
+        "-- sqlever:enable dml-without-where",
+      ].join("\n");
+
+      const directives = parseSuppressions(sql);
+      const sqlLines = sql.split("\n");
+      const { ranges, warnings: directiveWarnings } =
+        resolveSuppressionRanges(
+          directives,
+          sqlLines,
+          sqlLines.length,
+          knownRules,
+          FILE,
+          nameToId,
+        );
+
+      const findings = [makeFinding("SA010", 2)];
+      const { filtered, suppressed } = filterFindings(
+        findings,
+        ranges,
+        directiveWarnings,
+      );
+
+      expect(filtered).toHaveLength(0);
+      expect(suppressed).toHaveLength(1);
+      expect(suppressed[0]!.ruleId).toBe("SA010");
+    });
+
+    test("works without nameToId map (backward compatible)", () => {
+      const sql = [
+        "-- sqlever:disable SA010",
+        "UPDATE users SET tier = 'free';",
+        "-- sqlever:enable SA010",
+      ].join("\n");
+
+      const directives = parseSuppressions(sql);
+      const sqlLines = sql.split("\n");
+      const { ranges, warnings } = resolveSuppressionRanges(
+        directives,
+        sqlLines,
+        sqlLines.length,
+        knownRules,
+        FILE,
+      );
+
+      expect(ranges).toHaveLength(1);
+      expect(ranges[0]!.ruleId).toBe("SA010");
+      expect(warnings).toHaveLength(0);
+    });
+  });
+});

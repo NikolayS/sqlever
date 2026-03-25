@@ -14,6 +14,7 @@ import { offsetToLocation, node } from "../types.js";
 
 export const SA004: Rule = {
   id: "SA004",
+  name: "create-index-not-concurrently",
   severity: "warn",
   type: "static",
 

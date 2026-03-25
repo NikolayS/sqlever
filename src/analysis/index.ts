@@ -180,6 +180,9 @@ export class Analyzer {
 
       try {
         const findings = rule.check(context);
+        for (const finding of findings) {
+          finding.ruleName = rule.name;
+        }
         allFindings.push(...findings);
       } catch (err: unknown) {
         // Rule threw an error — report it as an internal finding
@@ -220,6 +223,7 @@ export class Analyzer {
     const directives = parseSuppressions(originalSql);
     const sqlLines = originalSql.split("\n");
     const knownRuleIds = new Set(this.registry.ids());
+    const nameToId = this.registry.nameToIdMap();
     const { ranges, warnings: directiveWarnings } =
       resolveSuppressionRanges(
         directives,
@@ -227,6 +231,7 @@ export class Analyzer {
         sqlLines.length,
         knownRuleIds,
         filePath,
+        nameToId,
       );
 
     // 8. Filter findings through suppressions

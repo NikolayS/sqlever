@@ -36,6 +36,7 @@ function hasAutoCommitDirective(rawSql: string): boolean {
 
 export const SA020: Rule = {
   id: "SA020",
+  name: "concurrently-in-transaction",
   severity: "error",
   type: "static",
 

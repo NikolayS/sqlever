@@ -9,6 +9,7 @@ import type { Rule, Finding, AnalysisContext } from "../../src/analysis/types";
 function makeRule(id: string, type: "static" | "connected" | "hybrid" = "static"): Rule {
   return {
     id,
+    name: `test-${id.toLowerCase()}`,
     severity: "warn",
     type,
     check(_ctx: AnalysisContext): Finding[] {

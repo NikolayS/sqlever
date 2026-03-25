@@ -41,6 +41,7 @@ function lockModeName(mode: number): string {
 
 export const SA021: Rule = {
   id: "SA021",
+  name: "lock-table",
   severity: "warn",
   type: "static",
 

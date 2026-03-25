@@ -15,6 +15,7 @@ import type { StringNode } from "../types.js";
 
 export const SA042: Rule = {
   id: "SA042",
+  name: "prefer-if-not-exists",
   severity: "info",
   type: "static",
 

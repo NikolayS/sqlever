@@ -24,6 +24,7 @@ import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA009: Rule = {
   id: "SA009",
+  name: "add-foreign-key-not-valid",
   severity: "warn",
   type: "hybrid",
 

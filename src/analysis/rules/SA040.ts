@@ -32,6 +32,7 @@ function isSerialType(typeName: Record<string, unknown>): string | null {
 
 export const SA040: Rule = {
   id: "SA040",
+  name: "prefer-identity-over-serial",
   severity: "info",
   type: "static",
 

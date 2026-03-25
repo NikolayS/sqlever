@@ -20,6 +20,7 @@ import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA033: Rule = {
   id: "SA033",
+  name: "missing-fk-index",
   severity: "info",
   type: "connected",
 

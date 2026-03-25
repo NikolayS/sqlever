@@ -39,6 +39,7 @@ function isTimestampWithoutTz(typeName: Record<string, unknown>): boolean {
 
 export const SA041: Rule = {
   id: "SA041",
+  name: "prefer-timestamptz",
   severity: "info",
   type: "static",
 

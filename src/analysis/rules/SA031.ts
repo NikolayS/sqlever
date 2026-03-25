@@ -17,6 +17,7 @@ import { offsetToLocation, node } from "../types.js";
 
 export const SA031: Rule = {
   id: "SA031",
+  name: "alter-type-add-value-in-transaction",
   severity: "error",
   type: "static",
 

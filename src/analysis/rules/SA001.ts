@@ -17,6 +17,7 @@ import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA001: Rule = {
   id: "SA001",
+  name: "add-column-not-null",
   severity: "error",
   type: "static",
 

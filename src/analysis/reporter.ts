@@ -20,6 +20,8 @@ export interface Location {
 
 export interface Finding {
   ruleId: string;
+  /** Human-readable rule name, e.g., "add-column-not-null". */
+  ruleName?: string;
   severity: Severity;
   message: string;
   location: Location;
@@ -43,6 +45,7 @@ export interface JsonReport {
   metadata: ReportMetadata;
   findings: Array<{
     ruleId: string;
+    ruleName?: string;
     severity: Severity;
     message: string;
     location: Location;
@@ -143,9 +146,10 @@ export function formatText(
 
   for (const f of findings) {
     const sevLabel = severityLabel(f.severity, useColors);
+    const ruleLabel = f.ruleName ? `${f.ruleId}/${f.ruleName}` : f.ruleId;
     const ruleId = useColors
-      ? colorize(f.ruleId, ANSI.dim)
-      : f.ruleId;
+      ? colorize(ruleLabel, ANSI.dim)
+      : ruleLabel;
     lines.push(`  ${sevLabel} ${ruleId}: ${f.message}`);
 
     const loc = `${f.location.file}:${f.location.line}:${f.location.column}`;
@@ -223,6 +227,9 @@ export function formatJson(
         message: f.message,
         location: { ...f.location },
       };
+      if (f.ruleName !== undefined) {
+        entry.ruleName = f.ruleName;
+      }
       if (f.suggestion !== undefined) {
         entry.suggestion = f.suggestion;
       }
@@ -252,9 +259,10 @@ export function formatGithubAnnotations(findings: readonly Finding[]): string {
   for (const f of findings) {
     const level = ghAnnotationLevel(f.severity);
     const loc = `file=${f.location.file},line=${f.location.line},col=${f.location.column}`;
+    const ruleLabel = f.ruleName ? `${f.ruleId}/${f.ruleName}` : f.ruleId;
     const msg = f.suggestion
-      ? `${f.ruleId}: ${f.message} — ${f.suggestion}`
-      : `${f.ruleId}: ${f.message}`;
+      ? `${ruleLabel}: ${f.message} — ${f.suggestion}`
+      : `${ruleLabel}: ${f.message}`;
     lines.push(`::${level} ${loc}::${msg}`);
   }
   return lines.join("\n") + (lines.length > 0 ? "\n" : "");

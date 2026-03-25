@@ -99,6 +99,7 @@ function isRiskyDDL(stmt: Record<string, unknown>): { risky: boolean; descriptio
 
 export const SA013: Rule = {
   id: "SA013",
+  name: "missing-lock-timeout",
   severity: "warn",
   type: "static",
 

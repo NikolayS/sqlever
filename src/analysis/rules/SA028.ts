@@ -19,6 +19,7 @@ import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA028: Rule = {
   id: "SA028",
+  name: "truncate-cascade",
   severity: "warn",
   type: "static",
 

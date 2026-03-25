@@ -35,6 +35,7 @@ function extractSchemaNames(
 
 export const SA022: Rule = {
   id: "SA022",
+  name: "drop-schema",
   severity: "error",
   type: "static",
 

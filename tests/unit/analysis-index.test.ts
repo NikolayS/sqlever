@@ -27,6 +27,7 @@ const TMP_DIR = join(import.meta.dir, "..", ".tmp-analysis-tests");
 function selectRule(): Rule {
   return {
     id: "TEST001",
+    name: "test-select",
     severity: "warn",
     type: "static",
     check(ctx: AnalysisContext): Finding[] {
@@ -62,6 +63,7 @@ function selectRule(): Rule {
 function createTableRule(): Rule {
   return {
     id: "TEST002",
+    name: "test-create-table",
     severity: "error",
     type: "static",
     check(ctx: AnalysisContext): Finding[] {
@@ -91,6 +93,7 @@ function createTableRule(): Rule {
 function connectedRule(): Rule {
   return {
     id: "TEST003",
+    name: "test-connected",
     severity: "warn",
     type: "connected",
     check(ctx: AnalysisContext): Finding[] {
@@ -300,6 +303,7 @@ describe("Analyzer", () => {
     test("handles rule that throws an error gracefully", () => {
       const throwingRule: Rule = {
         id: "THROW001",
+        name: "test-throw",
         severity: "error",
         type: "static",
         check(): Finding[] {
@@ -330,6 +334,7 @@ describe("Analyzer", () => {
       let capturedVersion = 0;
       const versionRule: Rule = {
         id: "VERSION001",
+        name: "test-version",
         severity: "info",
         type: "static",
         check(ctx: AnalysisContext): Finding[] {
@@ -346,6 +351,7 @@ describe("Analyzer", () => {
       let capturedVersion = 0;
       const versionRule: Rule = {
         id: "VERSION001",
+        name: "test-version",
         severity: "info",
         type: "static",
         check(ctx: AnalysisContext): Finding[] {

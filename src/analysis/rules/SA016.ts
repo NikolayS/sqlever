@@ -19,6 +19,7 @@ import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA016: Rule = {
   id: "SA016",
+  name: "add-check-not-valid",
   severity: "error",
   type: "static",
 
