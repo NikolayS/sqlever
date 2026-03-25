@@ -67,7 +67,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Deploy all changes
     const deployResult = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     expect(deployResult.exitCode).toBe(0);
@@ -184,7 +184,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Deploy first
     const deployResult = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     expect(deployResult.exitCode).toBe(0);
@@ -214,7 +214,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Deploy first
     await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
 
@@ -239,7 +239,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Deploy first
     const deployResult = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     expect(deployResult.exitCode).toBe(0);
@@ -310,7 +310,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Deploy
     const first = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     expect(first.exitCode).toBe(0);
@@ -324,7 +324,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Re-deploy
     const second = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     expect(second.exitCode).toBe(0);
@@ -364,7 +364,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Second deploy should be a no-op now
     const third = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     expect(third.exitCode).toBe(0);
@@ -380,7 +380,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Deploy only up to create_orders (skip create_indexes)
     const deployResult = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--to", "create_orders"],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis", "--to", "create_orders"],
       { cwd: tmpDir },
     );
     expect(deployResult.exitCode).toBe(0);
@@ -436,7 +436,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Deploy all 3
     const deployResult = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     expect(deployResult.exitCode).toBe(0);
@@ -510,7 +510,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Deploy all 3
     await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
 
@@ -522,7 +522,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Deploy again -- should only deploy create_orders + create_indexes
     const redeployResult = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     expect(redeployResult.exitCode).toBe(0);
@@ -554,14 +554,14 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // First deploy
     const first = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     expect(first.exitCode).toBe(0);
 
     // Second deploy -- no-op
     const second = await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     expect(second.exitCode).toBe(0);
@@ -608,7 +608,7 @@ describe.skipIf(!hasPg)("deploy + revert full lifecycle (#141)", () => {
 
     // Deploy all, then revert all
     await runSqlever(
-      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir],
+      ["deploy", "--db-uri", dbUri, "--top-dir", tmpDir, "--skip-analysis"],
       { cwd: tmpDir },
     );
     await runSqlever(
