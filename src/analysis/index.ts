@@ -152,6 +152,7 @@ export class Analyzer {
       pgVersion,
       config,
       db,
+      isTransactional: options?.isTransactional,
     };
 
     // 4. Determine which rules to run
