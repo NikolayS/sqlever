@@ -33,7 +33,7 @@ function makeTempDir(): string {
 
 function initGitRepo(): string {
   const dir = makeTempDir();
-  execSync("git init", { cwd: dir, stdio: "ignore" });
+  execSync("git init -b main", { cwd: dir, stdio: "ignore" });
   execSync('git config user.email "test@sqlever.dev"', {
     cwd: dir,
     stdio: "ignore",
