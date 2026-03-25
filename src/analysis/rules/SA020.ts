@@ -9,10 +9,9 @@
  * operations cannot run inside a transaction and will fail at runtime.
  *
  * The rule fires when:
- * - The SQL file contains an explicit BEGIN statement (wrapping CIC
- *   in a transaction), OR
+ * - The statement is between an explicit BEGIN and COMMIT/ROLLBACK, OR
  * - The AnalysisContext has isTransactional: true (deploy mode with
- *   transactional execution)
+ *   transactional execution) and there is no preceding COMMIT/ROLLBACK
  *
  * Standalone CONCURRENTLY operations without transaction context are
  * the correct way to create/drop/reindex on live tables and do NOT
@@ -23,7 +22,7 @@
  * to suppress the warning.
  */
 
-import type { Rule, Finding, AnalysisContext, DefElem, ParseResult } from "../types.js";
+import type { Rule, Finding, AnalysisContext, DefElem } from "../types.js";
 import { offsetToLocation, node, nodes } from "../types.js";
 import { extractDropObjectNames } from "../ast-helpers.js";
 
@@ -33,21 +32,6 @@ import { extractDropObjectNames } from "../ast-helpers.js";
  */
 function hasAutoCommitDirective(rawSql: string): boolean {
   return /--\s*sqlever:(auto-commit|no-transaction)/i.test(rawSql);
-}
-
-/**
- * Check if the AST contains an explicit BEGIN (TransactionStmt with
- * TRANS_STMT_BEGIN), indicating the script wraps statements in a
- * transaction block.
- */
-function hasExplicitBegin(ast: ParseResult): boolean {
-  for (const stmtEntry of ast.stmts) {
-    const txn = stmtEntry.stmt?.TransactionStmt as
-      | { kind?: string }
-      | undefined;
-    if (txn?.kind === "TRANS_STMT_BEGIN") return true;
-  }
-  return false;
 }
 
 export const SA020: Rule = {
@@ -64,14 +48,34 @@ export const SA020: Rule = {
     // If the file has a -- sqlever:auto-commit (or legacy no-transaction) directive, skip
     if (hasAutoCommitDirective(rawSql)) return findings;
 
-    // Only fire when there is a transaction context: either the AST
-    // contains an explicit BEGIN or the analyzer signals transactional
-    // execution (e.g. deploy mode without auto-commit).
-    const inTransaction = context.isTransactional || hasExplicitBegin(ast);
-    if (!inTransaction) return findings;
+    // Track transaction depth as we walk statements in order.
+    // If isTransactional (runner wraps in txn), we start at depth 1.
+    let txnDepth = context.isTransactional ? 1 : 0;
 
     for (const stmtEntry of ast.stmts) {
       const stmt = stmtEntry.stmt;
+
+      // Track BEGIN / COMMIT / ROLLBACK to know if we're inside a block
+      const txn = stmt?.TransactionStmt as
+        | { kind?: string }
+        | undefined;
+      if (txn) {
+        if (
+          txn.kind === "TRANS_STMT_BEGIN" ||
+          txn.kind === "TRANS_STMT_START"
+        ) {
+          txnDepth++;
+        } else if (
+          txn.kind === "TRANS_STMT_COMMIT" ||
+          txn.kind === "TRANS_STMT_ROLLBACK"
+        ) {
+          txnDepth = Math.max(0, txnDepth - 1);
+        }
+        continue;
+      }
+
+      // Only flag CONCURRENTLY operations when inside a transaction
+      if (txnDepth <= 0) continue;
 
       // CREATE INDEX CONCURRENTLY
       if (stmt?.IndexStmt) {
