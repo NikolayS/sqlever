@@ -106,10 +106,11 @@ export async function runRebase(args: ParsedArgs): Promise<number> {
   if (opts.ontoChange) {
     revertRest.push("--to", opts.ontoChange);
   }
-  // Always suppress prompt during rebase -- use -y from opts or require it
-  if (opts.noPrompt) {
-    revertRest.push("-y");
-  }
+  // Always suppress prompt during rebase -- rebase is already a deliberate
+  // composite action. Without -y the revert phase returns 0 on declined
+  // confirmation (non-TTY / CI), which is indistinguishable from success,
+  // causing rebase to silently skip revert and proceed to deploy.
+  revertRest.push("-y");
 
   const revertArgs: ParsedArgs = {
     ...args,
