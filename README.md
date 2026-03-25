@@ -363,7 +363,7 @@ The following Sqitch commands are recognized but not yet implemented: `rebase`, 
 | SA030 | warn | static | `ADD UNIQUE` constraint or `CREATE UNIQUE INDEX` -- may fail if duplicates exist |
 | SA031 | error | static | `ALTER TYPE ... ADD VALUE` inside a transaction on PG < 12 -- fails at runtime |
 | SA032 | warn | static | `BEGIN` without `COMMIT` or `ROLLBACK` -- transaction left open |
-| SA033 | info | connected | Missing index on foreign key referencing column -- causes sequential scans on referenced table |
+| SA033 | info | connected | Missing index on foreign key referencing column -- causes sequential scans on referencing table |
 | SA034 | info | static | `CREATE INDEX CONCURRENTLY` can silently produce an INVALID index -- verify `pg_index.indisvalid` |
 | SA035 | warn | static | `DROP PRIMARY KEY` constraint -- may break logical replication replica identity |
 | SA036 | warn | connected | Large `UPDATE` / `INSERT ... SELECT` without batching -- consider `sqlever batch` |
