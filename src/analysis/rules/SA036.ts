@@ -24,6 +24,7 @@ import { offsetToLocation, node } from "../types.js";
 
 export const SA036: Rule = {
   id: "SA036",
+  name: "large-dml-without-batching",
   severity: "warn",
   type: "connected",
 

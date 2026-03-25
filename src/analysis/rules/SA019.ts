@@ -14,6 +14,7 @@ import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA019: Rule = {
   id: "SA019",
+  name: "reindex-not-concurrently",
   severity: "warn",
   type: "static",
 

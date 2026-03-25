@@ -32,6 +32,7 @@ function hasPrimaryKey(constraints: Record<string, unknown>[]): boolean {
 
 export const SA039: Rule = {
   id: "SA039",
+  name: "prefer-bigint-pk",
   severity: "info",
   type: "static",
 

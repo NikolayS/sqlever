@@ -28,6 +28,7 @@ function getColName(colDef: Record<string, unknown>): string {
 
 export const SA038: Rule = {
   id: "SA038",
+  name: "prefer-text-over-varchar",
   severity: "info",
   type: "static",
 

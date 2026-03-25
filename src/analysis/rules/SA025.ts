@@ -17,6 +17,7 @@ import { offsetToLocation, node } from "../types.js";
 
 export const SA025: Rule = {
   id: "SA025",
+  name: "nested-begin",
   severity: "warn",
   type: "static",
 

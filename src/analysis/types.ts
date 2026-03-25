@@ -103,6 +103,8 @@ export type Location = FindingLocation;
 /** A single finding produced by a rule. */
 export interface Finding {
   ruleId: string;
+  /** Human-readable rule name, attached by the analyzer after rule execution. */
+  ruleName?: string;
   severity: Severity;
   message: string;
   location: FindingLocation;
@@ -197,6 +199,8 @@ export type RuleType = "static" | "connected" | "hybrid";
 export interface Rule {
   /** Unique rule identifier, e.g., "SA001". */
   id: string;
+  /** Human-readable kebab-case name, e.g., "add-column-not-null". */
+  name: string;
   /** Default severity level. */
   severity: Severity;
   /** Whether this rule is static, connected, or hybrid. */

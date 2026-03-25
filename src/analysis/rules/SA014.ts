@@ -16,6 +16,7 @@ import { offsetToLocation, node, nodes } from "../types.js";
 
 export const SA014: Rule = {
   id: "SA014",
+  name: "vacuum-full-or-cluster",
   severity: "warn",
   type: "static",
 

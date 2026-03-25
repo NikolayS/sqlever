@@ -18,6 +18,7 @@ import { offsetToLocation, node } from "../types.js";
 
 export const SA010: Rule = {
   id: "SA010",
+  name: "dml-without-where",
   severity: "warn",
   type: "static",
 

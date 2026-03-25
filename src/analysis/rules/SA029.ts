@@ -26,6 +26,7 @@ const SERIAL_TYPES: ReadonlySet<string> = new Set([
 
 export const SA029: Rule = {
   id: "SA029",
+  name: "create-table-serial",
   severity: "info",
   type: "static",
   defaultOff: true,

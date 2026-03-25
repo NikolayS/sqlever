@@ -64,6 +64,17 @@ export class RuleRegistry {
   }
 
   /**
+   * Return a map from human-readable rule name to rule ID.
+   */
+  nameToIdMap(): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const rule of this.rules.values()) {
+      map.set(rule.name, rule.id);
+    }
+    return map;
+  }
+
+  /**
    * Number of registered rules.
    */
   get size(): number {

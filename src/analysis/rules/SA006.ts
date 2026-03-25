@@ -16,6 +16,7 @@ import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA006: Rule = {
   id: "SA006",
+  name: "drop-column",
   severity: "warn",
   type: "static",
 

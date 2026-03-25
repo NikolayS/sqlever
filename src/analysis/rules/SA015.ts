@@ -15,6 +15,7 @@ import { offsetToLocation, node } from "../types.js";
 
 export const SA015: Rule = {
   id: "SA015",
+  name: "alter-table-rename",
   severity: "warn",
   type: "static",
 

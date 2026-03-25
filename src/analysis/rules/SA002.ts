@@ -20,6 +20,7 @@ import { containsVolatileFunction, forEachAlterTableCmd } from "../ast-helpers.j
 
 export const SA002: Rule = {
   id: "SA002",
+  name: "add-column-volatile-default",
   severity: "error",
   type: "static",
 

@@ -54,6 +54,7 @@ describe("analysis types", () => {
   test("Rule interface can be implemented", () => {
     const rule: Rule = {
       id: "SA999",
+      name: "test-rule",
       severity: "warn",
       type: "static",
       check(_context: AnalysisContext): Finding[] {

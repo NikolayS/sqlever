@@ -14,6 +14,7 @@ import { extractDropObjectNames } from "../ast-helpers.js";
 
 export const SA005: Rule = {
   id: "SA005",
+  name: "drop-index-not-concurrently",
   severity: "warn",
   type: "static",
 

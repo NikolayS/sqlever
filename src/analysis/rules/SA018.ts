@@ -22,6 +22,7 @@ import { forEachAlterTableCmd } from "../ast-helpers.js";
 
 export const SA018: Rule = {
   id: "SA018",
+  name: "add-primary-key-without-index",
   severity: "warn",
   type: "hybrid",
 
