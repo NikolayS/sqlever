@@ -60,7 +60,10 @@ export const SA020: Rule = {
         | { kind?: string }
         | undefined;
       if (txn) {
-        if (txn.kind === "TRANS_STMT_BEGIN") {
+        if (
+          txn.kind === "TRANS_STMT_BEGIN" ||
+          txn.kind === "TRANS_STMT_START"
+        ) {
           txnDepth++;
         } else if (
           txn.kind === "TRANS_STMT_COMMIT" ||
