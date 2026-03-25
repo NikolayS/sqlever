@@ -21,6 +21,8 @@ import { runDoctor } from "./commands/doctor";
 import { runDiff } from "./commands/diff";
 import { parseReviewArgs, runReviewCommand } from "./commands/review";
 import { runBatch } from "./commands/batch";
+import { runRebase } from "./commands/rebase";
+import { runConfig } from "./commands/config";
 
 // ---------------------------------------------------------------------------
 // Command registry — all commands from SPEC R1 plus sqlever extensions
@@ -247,7 +249,7 @@ function printCommandHelp(command: string): void {
 // ---------------------------------------------------------------------------
 
 function stubHandler(command: string): never {
-  process.stderr.write(`sqlever ${command}: not yet implemented\n`);
+  process.stderr.write(`sqlever ${command}: not yet implemented -- planned for v1.1\n`);
   process.exit(1);
   // TypeScript needs this even though process.exit() is noreturn
   throw new Error("unreachable");
@@ -421,6 +423,12 @@ async function dispatchCommand(command: string, args: ParsedArgs): Promise<numbe
     case "batch":
       await runBatch(args);
       return 0;
+
+    case "rebase":
+      return await runRebase(args);
+
+    case "config":
+      return runConfig(args);
 
     default:
       stubHandler(command);

@@ -309,14 +309,14 @@ describe("unknown commands", () => {
 // ---------------------------------------------------------------------------
 
 describe("command stubs", () => {
-  // "help" is handled specially (not a stub); "init", "add", "deploy", "log", "revert", "verify", "tag", "rework", "show", "status", "plan", and "analyze" are implemented — exclude them
-  const STUB_COMMANDS = ALL_COMMANDS.filter((c) => c !== "help" && c !== "init" && c !== "add" && c !== "deploy" && c !== "log" && c !== "revert" && c !== "verify" && c !== "tag" && c !== "rework" && c !== "show" && c !== "status" && c !== "plan" && c !== "analyze" && c !== "explain" && c !== "diff" && c !== "review" && c !== "batch");
+  // "help" is handled specially (not a stub); implemented commands are excluded
+  const STUB_COMMANDS = ALL_COMMANDS.filter((c) => c !== "help" && c !== "init" && c !== "add" && c !== "deploy" && c !== "log" && c !== "revert" && c !== "verify" && c !== "tag" && c !== "rework" && c !== "show" && c !== "status" && c !== "plan" && c !== "analyze" && c !== "explain" && c !== "diff" && c !== "review" && c !== "batch" && c !== "rebase" && c !== "config");
 
   for (const cmd of STUB_COMMANDS) {
     test(`'${cmd}' prints not-yet-implemented and exits 1`, async () => {
       const { stderr, exitCode } = await run(cmd);
       expect(exitCode).toBe(1);
-      expect(stderr).toContain(`sqlever ${cmd}: not yet implemented`);
+      expect(stderr).toContain(`sqlever ${cmd}: not yet implemented -- planned for v1.1`);
     });
   }
 });
@@ -329,25 +329,25 @@ describe("output module integration", () => {
   test("--quiet flag is accepted without error", async () => {
     // --quiet with a stub command should still exit 1 (stub) but not
     // crash due to flag parsing
-    const { stderr, exitCode } = await run("--quiet", "rebase");
+    const { stderr, exitCode } = await run("--quiet", "bundle");
     expect(exitCode).toBe(1);
     expect(stderr).toContain("not yet implemented");
   });
 
   test("--verbose flag is accepted without error", async () => {
-    const { stderr, exitCode } = await run("--verbose", "rebase");
+    const { stderr, exitCode } = await run("--verbose", "bundle");
     expect(exitCode).toBe(1);
     expect(stderr).toContain("not yet implemented");
   });
 
   test("--format json is accepted without error", async () => {
-    const { stderr, exitCode } = await run("--format", "json", "rebase");
+    const { stderr, exitCode } = await run("--format", "json", "bundle");
     expect(exitCode).toBe(1);
     expect(stderr).toContain("not yet implemented");
   });
 
   test("--format invalid value exits 1 with error", async () => {
-    const { stderr, exitCode } = await run("--format", "xml", "rebase");
+    const { stderr, exitCode } = await run("--format", "xml", "bundle");
     expect(exitCode).toBe(1);
     expect(stderr).toContain("invalid --format");
   });
@@ -362,29 +362,29 @@ describe("global option flags", () => {
     const { stderr, exitCode } = await run(
       "--db-uri",
       "postgresql://localhost/mydb",
-      "rebase",
+      "bundle",
     );
     expect(exitCode).toBe(1);
     expect(stderr).toContain("not yet implemented");
   });
 
   test("--plan-file is accepted", async () => {
-    const { exitCode } = await run("--plan-file", "my.plan", "rebase");
+    const { exitCode } = await run("--plan-file", "my.plan", "bundle");
     expect(exitCode).toBe(1);
   });
 
   test("--top-dir is accepted", async () => {
-    const { exitCode } = await run("--top-dir", "/some/path", "rebase");
+    const { exitCode } = await run("--top-dir", "/some/path", "bundle");
     expect(exitCode).toBe(1);
   });
 
   test("--registry is accepted", async () => {
-    const { exitCode } = await run("--registry", "_sqitch", "rebase");
+    const { exitCode } = await run("--registry", "_sqitch", "bundle");
     expect(exitCode).toBe(1);
   });
 
   test("--target is accepted", async () => {
-    const { exitCode } = await run("--target", "production", "rebase");
+    const { exitCode } = await run("--target", "production", "bundle");
     expect(exitCode).toBe(1);
   });
 });
