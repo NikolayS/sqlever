@@ -1,0 +1,7 @@
+%syntax-version=1.0.0
+%project=deploy_revert_test
+%uri=https://example.com/deploy-revert-test
+
+create_users 2024-02-01T10:00:00Z Test Runner <test@example.com> # Users table
+create_orders [create_users] 2024-02-01T10:01:00Z Test Runner <test@example.com> # Orders table with FK to users
+create_indexes [create_users create_orders] 2024-02-01T10:02:00Z Test Runner <test@example.com> # Indexes on users and orders
