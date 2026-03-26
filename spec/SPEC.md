@@ -1,6 +1,6 @@
 # sqlever — Product Specification
 
-- **Version:** 0.9 (draft)
+- **Version:** 1.0 (draft)
 - **Status:** Pre-development — spec review in progress, no implementation yet
 - **License:** Apache 2.0
 - **Changelog:** [SPEC-CHANGELOG.md](SPEC-CHANGELOG.md)
@@ -715,11 +715,249 @@ sqlever deploy --dry-run   # prints what would be deployed, runs analysis, exits
 
 **What dry-run does NOT do:** Predict lock contention (depends on concurrent queries), estimate DDL duration (depends on table size), verify data-dependent operations (constraints, COPY), or check disk space. Dry-run validates the plan and runs static analysis but does not simulate execution.
 
-### 5.11 Migration diff
+### 5.11 Migration diff (basic, deprecated in favor of 5.12)
 
 ```bash
 sqlever diff               # show schema diff between deployed and plan
 sqlever diff --from tag_a --to tag_b
+```
+
+### 5.12 Offline schema diff — declarative migrations (v1.3)
+
+Given two schema dumps (or DDL files), compute the migration SQL to get from one to the other. No live database required. No shadow DB. Works in CI with only files.
+
+**Core use cases:**
+
+```bash
+# Diff two pg_dump --schema-only outputs
+sqlever schema diff before.sql after.sql
+
+# Diff current deployed state against desired schema file
+sqlever schema diff --from prod --to desired_schema.sql
+
+# Desired state workflow: maintain one canonical schema.sql, generate migrations automatically
+sqlever schema diff schema_v1.sql schema_v2.sql --out migrations/003_add_user_tier.sql
+
+# Reverse: auto-revert generation
+sqlever schema diff after.sql before.sql --out migrations/003_add_user_tier.revert.sql
+```
+
+**What it handles:**
+
+| Change type | Output |
+|-------------|--------|
+| New table | `CREATE TABLE ...` |
+| Dropped table | `DROP TABLE ...` (requires `--confirm-destructive`) |
+| New column | `ALTER TABLE ... ADD COLUMN ...` |
+| Dropped column | `ALTER TABLE ... DROP COLUMN ...` (requires `--confirm-destructive`) |
+| Column type change | `ALTER TABLE ... ALTER COLUMN ... TYPE ...` (or error if unsafe) |
+| New index | `CREATE INDEX ...` |
+| Dropped index | `DROP INDEX ...` |
+| New constraint | `ALTER TABLE ... ADD CONSTRAINT ...` |
+| New FK | `ALTER TABLE ... ADD FOREIGN KEY ...` |
+| Column nullability | `ALTER TABLE ... ALTER COLUMN ... SET/DROP NOT NULL` |
+| Column default | `ALTER TABLE ... ALTER COLUMN ... SET/DROP DEFAULT` |
+| Function change | `CREATE OR REPLACE FUNCTION ...` |
+| View change | `CREATE OR REPLACE VIEW ...` |
+| RLS policy | `CREATE/ALTER/DROP POLICY ...` |
+| Trigger | `CREATE/DROP TRIGGER ...` |
+| Sequence | `ALTER SEQUENCE ...` |
+| Enum | `ALTER TYPE ... ADD VALUE ...` (append only; removal requires explicit flag) |
+
+**What it explicitly does not handle:**
+
+- Column renames — cannot distinguish rename from drop+add; use `--rename col_a:col_b` hint
+- Type changes requiring `USING` clause — flag as error, require manual SQL
+- Data migrations — schema diff only, no DML generation
+
+**Column rename hint:**
+
+```bash
+sqlever schema diff old.sql new.sql --rename users.name:users.full_name
+# Generates: ALTER TABLE users RENAME COLUMN name TO full_name
+# Without hint: would generate DROP COLUMN name + ADD COLUMN full_name (data loss)
+```
+
+**Dependency ordering:**
+
+Output SQL is topologically ordered: drop FKs before drop tables, create tables before FKs referencing them, create indexes after tables, functions before views that use them.
+
+**Parsing strategy:**
+
+Parses `pg_dump --schema-only` output — not arbitrary hand-written DDL. pg_dump format is normalized, consistently formatted, and stable. Shadow database mode (spin up Docker Postgres, apply desired schema, dump, diff) is supported opt-in for teams that prefer it.
+
+Two-pass algorithm:
+1. Parse both dumps into object maps keyed by `(schema, object_type, object_name)`
+2. Compute three sets: added (in B not A), removed (in A not B), changed (in both, body differs)
+3. For changed: diff at attribute level (columns, constraints, indexes, etc.)
+4. Generate SQL, topologically ordered
+
+**`--safe` flag applies automatically** (see 5.13) — diff output is production-safe by default unless `--unsafe` is passed.
+
+### 5.13 Safe mode — production-safe migration rewriting (v1.3)
+
+Every migration sqlever generates or analyzes can be run through safe mode. Safe mode rewrites dangerous single-step operations into the multi-step production-safe equivalent. This is the knowledge from GitLab's `migration_helpers.rb` and postgres.ai's zero-downtime migration guides, embedded directly in the tool.
+
+**Activation:**
+
+```bash
+sqlever schema diff old.sql new.sql --safe          # diff output is safe (default)
+sqlever analyze migration.sql --safe                # analyze + suggest safe rewrites
+sqlever deploy --safe                               # block on unsafe patterns, show rewrite
+```
+
+Safe mode is **on by default** for `schema diff` output. Opt-out with `--unsafe`.
+
+**Safe transformation catalog:**
+
+---
+
+**ST001 — ADD COLUMN NOT NULL without server-side default (PG < 11)**
+
+Unsafe:
+```sql
+ALTER TABLE users ADD COLUMN tier text NOT NULL DEFAULT 'free';
+```
+Safe rewrite — 3 steps, 3 separate transactions:
+```sql
+-- Step 1: add nullable column (fast, no rewrite)
+ALTER TABLE users ADD COLUMN tier text;
+-- Step 2: backfill (batched DML, see 5.5; not inline)
+UPDATE users SET tier = 'free' WHERE tier IS NULL;
+-- Step 3: set constraint after backfill complete
+ALTER TABLE users ALTER COLUMN tier SET NOT NULL;
+ALTER TABLE users ALTER COLUMN tier SET DEFAULT 'free';
+```
+Note: PG 11+ with an immutable default is safe as a single step. Version-aware.
+
+---
+
+**ST002 — ADD FOREIGN KEY**
+
+Unsafe:
+```sql
+ALTER TABLE orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id);
+```
+Safe rewrite:
+```sql
+-- Step 1: add without validation (brief lock)
+ALTER TABLE orders
+  ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id) NOT VALID;
+-- Step 2 (separate migration): validate (scans table but does not block reads/writes)
+ALTER TABLE orders VALIDATE CONSTRAINT fk_user;
+```
+
+---
+
+**ST003 — ADD CHECK CONSTRAINT**
+
+Same NOT VALID → VALIDATE CONSTRAINT pattern as ST002.
+
+---
+
+**ST004 — CREATE INDEX**
+
+Unsafe: `CREATE INDEX idx ON t(col)` → Safe: `CREATE INDEX CONCURRENTLY idx ON t(col)`
+
+Note: CONCURRENTLY cannot run inside a transaction block. Safe rewrite adds `-- sqlever: no-transaction`.
+
+---
+
+**ST005 — DROP INDEX**
+
+Unsafe: `DROP INDEX idx` → Safe: `DROP INDEX CONCURRENTLY idx`
+
+---
+
+**ST006 — SET NOT NULL on existing column**
+
+Unsafe (full table scan + AccessExclusiveLock on PG < 12):
+```sql
+ALTER TABLE users ALTER COLUMN email SET NOT NULL;
+```
+Safe rewrite:
+```sql
+-- Step 1: check constraint NOT VALID (fast)
+ALTER TABLE users ADD CONSTRAINT users_email_not_null CHECK (email IS NOT NULL) NOT VALID;
+-- Step 2: validate (scans table, no write blocking)
+ALTER TABLE users VALIDATE CONSTRAINT users_email_not_null;
+-- Step 3 (PG 12+): use constraint as proof — no scan needed
+ALTER TABLE users ALTER COLUMN email SET NOT NULL;
+ALTER TABLE users DROP CONSTRAINT users_email_not_null;
+```
+
+---
+
+**ST007 — ALTER COLUMN TYPE**
+
+Most type changes require a full table rewrite. Safe only for:
+- `varchar(N)` → `varchar(M)` where M > N
+- `char(N)` → `text`
+
+Everything else produces an error with instructions:
+```
+ERROR ST007: ALTER COLUMN TYPE for users.score (int → bigint) requires a full table rewrite.
+Safe approach: add new column, backfill, swap with expand/contract.
+Use: sqlever scaffold type-change users score int bigint
+```
+
+---
+
+**ST008 — RENAME COLUMN / RENAME TABLE**
+
+Always requires application coordination. Generates expand/contract scaffold:
+```
+ERROR ST008: RENAME COLUMN requires coordinated application deploy.
+Use: sqlever scaffold rename-column users name full_name
+```
+
+---
+
+**Multi-step output format:**
+
+When safe mode generates a multi-step rewrite, output is multiple migration files:
+```
+migrations/
+  003_add_fk_orders_user.deploy.sql     -- step 1: NOT VALID
+  003_add_fk_orders_user.validate.sql   -- step 2: VALIDATE (separate deploy window)
+  003_add_fk_orders_user.revert.sql     -- single revert drops the constraint
+  003_add_fk_orders_user.verify.sql
+```
+The validate step is a separate Sqitch change depending on the first.
+
+**`sqlever scaffold` subcommand:**
+
+```bash
+sqlever scaffold type-change <table> <column> <from_type> <to_type>
+sqlever scaffold rename-column <table> <old_name> <new_name>
+sqlever scaffold rename-table <old_name> <new_name>
+sqlever scaffold backfill <table> <column> <expression>
+```
+
+Each scaffold generates the full multi-step migration set (expand/fill/contract), ready to fill in.
+
+### 5.14 Verify SQL — static analysis with safe-rewrite suggestions (v1.1 extended in v1.3)
+
+`sqlever verify-sql` is the standalone static analyzer. In v1.3 it gains the ability to not just flag dangerous patterns but suggest the safe rewrite inline.
+
+```bash
+sqlever verify-sql migration.sql                    # analyze, report findings
+sqlever verify-sql migration.sql --suggest-rewrites # report + show safe SQL
+sqlever verify-sql migration.sql --rewrite          # output safe version of migration
+sqlever verify-sql migration.sql --format json      # machine-readable for CI/agents
+```
+
+**Output with `--suggest-rewrites`:**
+
+```
+WARN SA004 (line 3): CREATE INDEX without CONCURRENT will block writes.
+  Safe rewrite:
+    CREATE INDEX CONCURRENTLY idx_orders_user_id ON orders(user_id);
+  Note: CONCURRENT cannot run in a transaction. Add -- sqlever: no-transaction.
+
+ERROR SA001 (line 7): ADD COLUMN NOT NULL DEFAULT on PG < 11 causes full table rewrite.
+  On PG 11+: safe if default is immutable. Specify --pg-version.
+  Safe rewrite for PG < 11: [3-step sequence as in ST001]
 ```
 
 ---
@@ -848,6 +1086,16 @@ Deploy connections should set:
 - `idle_in_transaction_session_timeout` — set to a configurable generous value (default: 10 minutes), not unlimited. This provides a safety net against hung deploy processes (e.g., operator walks away during a TUI prompt) without interfering with normal operation. Configurable via `sqlever.toml` `[deploy] idle_in_transaction_session_timeout`.
 - `lock_timeout` — set by the lock timeout guard (5.9), per-migration configurable.
 - `search_path` — respect the database/role default (Sqitch-compatible behavior). Sqitch does not set `search_path`; sqlever follows suit. Override available via `sqlever.toml` `[deploy] search_path` for teams that want explicit control.
+
+### DD15 — Offline diff targets pg_dump output, not arbitrary DDL
+
+`sqlever schema diff` parses `pg_dump --schema-only` output, not arbitrary hand-written DDL. pg_dump output is normalized, consistently formatted, and unambiguous. Parsing arbitrary DDL is a much harder problem (formatting variations, extension syntax, non-standard constructs).
+
+For the desired-state workflow, users maintain their desired schema as a file that can be produced by `pg_dump --schema-only` from a development database. Shadow database mode (opt-in: spin up Docker Postgres, apply desired schema, dump, diff) is available for teams that prefer it.
+
+### DD16 — Safe mode is output-aware, not just input-aware
+
+Safe transformations (ST001–ST008) produce different output SQL — multi-step, multi-transaction, potentially split into 2–3 separate Sqitch changes with explicit dependencies. This is the key differentiator from static analysis tools that only warn: we generate the correct migration, not just flag the incorrect one. Safe mode is the default for `schema diff` output; `--unsafe` is the opt-out.
 
 ---
 
@@ -1538,10 +1786,13 @@ After this phase: drop-in replacement for all Sqitch commands.
 | Sqitch | CLI interface, plan format, tracking schema | Perl runtime, multi-DB |
 | pgroll | Expand/contract pattern concept | Full table recreation |
 | migrationpilot | Dangerous pattern detection ideas | Thin implementation |
-| GitLab migration helpers | Batched DML design, throttling, retry, replication lag monitoring | Rails dependency |
+| GitLab migration helpers | Batched DML design, throttling, retry, replication lag monitoring; safe pattern catalog (ST001–ST008) | Rails dependency |
 | SkyTools PGQ | 3-partition queue architecture | External daemon |
 | pg_index_pilot | Write-ahead tracking, advisory lock patterns, invalid index cleanup | PL/pgSQL-only, dblink architecture |
 | Atlas (Ariga) | ~12 missing analysis rules, `force` config, structured fix suggestions, PR comment reports | HCL config, declarative schema, dev-database requirement, multi-DB abstraction, Pro paywall on PG safety rules |
+| strong_migrations | UX model: explain danger + show safe rewrite inline; rule set | Rails/ActiveRecord coupling |
+| migra | Offline schema diff concept | Requires two live DBs; no safety awareness in output |
+| postgres.ai migration guides | Safe transformation rules (ST001–ST008) codified from articles | — |
 | Flyway / Liquibase | Nothing | Wrong philosophy |
 
 ---
