@@ -2,6 +2,44 @@
 
 All notable changes to the sqlever spec and codebase will be documented here.
 
+## [SPEC 1.0] — 2026-03-26
+
+Three new capabilities — positions sqlever as a three-in-one tool (migration runner + offline schema diff + production-safe rewriter):
+
+**5.12 Offline schema diff (declarative migrations)**
+- `sqlever schema diff <before.sql> <after.sql>` — no live DB required
+- Parses `pg_dump --schema-only`; structural diff → dependency-ordered ALTER/CREATE/DROP SQL
+- Handles: tables, columns, indexes, constraints, FK, functions, views, RLS, triggers, enums, sequences
+- `--rename schema.col_a:col_b` hint for column renames (avoids drop+add misinterpretation)
+- `--confirm-destructive` required for DROP operations
+- Shadow DB mode (opt-in): Docker Postgres for desired-state diff against live DB
+- `--safe` on by default; `--unsafe` to get raw SQL
+
+**5.13 Safe mode — production-safe migration rewriting**
+- ST001–ST008: safe transformation catalog
+  - ST001: ADD COLUMN NOT NULL DEFAULT (3-step for PG<11; single-step PG11+ with immutable default)
+  - ST002: ADD FOREIGN KEY (NOT VALID → VALIDATE in separate migration)
+  - ST003: ADD CHECK CONSTRAINT (same NOT VALID → VALIDATE pattern)
+  - ST004: CREATE INDEX → CONCURRENTLY + no-transaction annotation
+  - ST005: DROP INDEX → CONCURRENTLY
+  - ST006: SET NOT NULL (check constraint NOT VALID → validate → set not null, PG version-aware)
+  - ST007: ALTER COLUMN TYPE (error for unsafe casts; scaffold suggestion)
+  - ST008: RENAME COLUMN/TABLE (error + scaffold suggestion)
+- Multi-step output: NOT VALID + VALIDATE as separate Sqitch changes with explicit dependencies
+- `sqlever scaffold type-change|rename-column|rename-table|backfill`: generate full migration sets
+- Safe mode default for `schema diff`; off by default for `deploy` (to not break existing workflows)
+
+**5.14 Verify SQL — static analysis with safe-rewrite suggestions**
+- `--suggest-rewrites`: show safe SQL alongside each finding
+- `--rewrite`: output a safe version of the entire migration
+- Extends existing SA001–SA042 rule set
+
+**Other changes:**
+- Added Problems 6 (no offline diff) and 7 (no production-safe rewriting)
+- Added prior art: strong_migrations, migra, postgres.ai migration guides
+- Added DD15 (offline diff targets pg_dump), DD16 (safe mode is output-aware)
+- SPEC bumped to version 1.0
+
 ## [Unreleased]
 
 ## [SPEC 0.9] — 2026-03-20
