@@ -4,13 +4,11 @@ All notable changes to the sqlever spec and codebase will be documented here.
 
 ## [SPEC 1.0] — 2026-03-26
 
-Three new capabilities — positions sqlever as a three-in-one tool (migration runner + offline schema diff + production-safe rewriter):
-
 **5.12 Offline schema diff (declarative migrations)**
 - `sqlever schema diff <before.sql> <after.sql>` — no live DB required
 - Parses `pg_dump --schema-only`; structural diff → dependency-ordered ALTER/CREATE/DROP SQL
 - Handles: tables, columns, indexes, constraints, FK, functions, views, RLS, triggers, enums, sequences
-- `--rename schema.col_a:col_b` hint for column renames (avoids drop+add misinterpretation)
+- `--rename table.old_col:new_col` hint for column renames (avoids drop+add misinterpretation); can be specified multiple times
 - `--confirm-destructive` required for DROP operations
 - Shadow DB mode (opt-in): Docker Postgres for desired-state diff against live DB
 - `--safe` on by default; `--unsafe` to get raw SQL
