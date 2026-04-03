@@ -104,33 +104,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - name: Install build deps + pgTAP
+      - name: Install pgTAP
         run: |
           sudo apt-get update -qq
-          # Try apt package first (Ubuntu may have it for PG18)
           sudo apt-get install -y -qq \
             postgresql-client-18 \
             libtap-parser-sourcehandler-pgtap-perl \
             cpanminus \
             build-essential \
-            postgresql-server-dev-18 || true
-          # Ensure pg_prove Perl module is available
-          sudo cpanm --quiet TAP::Parser::SourceHandler::pgTAP || true
-          # Build pgtap from source and install into the running PG18
-          git clone --depth 1 https://github.com/theory/pgtap.git /tmp/pgtap
-          cd /tmp/pgtap
-          make PG_CONFIG=$(pg_config --bindir)/pg_config 2>/dev/null || make
-          PGPASSWORD=test make install PGHOST=localhost PGPORT=5418 PGUSER=postgres 2>/dev/null || \
-            sudo make install PG_CONFIG=$(pg_config --bindir)/pg_config 2>/dev/null || true
-          # Create the pgtap extension in the test database
+            postgresql-server-dev-18
+          sudo cpanm --quiet TAP::Parser::SourceHandler::pgTAP
+          git clone --depth 1 --branch v1.3.3 \
+            https://github.com/theory/pgtap.git /tmp/pgtap
+          cd /tmp/pgtap && make
           PGPASSWORD=test psql -h localhost -p 5418 -U postgres \
-            -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
+            -f /tmp/pgtap/sql/pgtap.sql
       - name: Run pgTAP tests
         env:
           PGPASSWORD: test
         run: |
           pg_prove -h localhost -p 5418 -U postgres -d postgres \
             tests/pgtap/ --verbose --timer
+
 
   build:
     runs-on: ${{ matrix.os }}
