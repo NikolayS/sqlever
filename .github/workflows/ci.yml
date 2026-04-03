@@ -58,13 +58,13 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_PASSWORD: test
           POSTGRES_USER: postgres
           POSTGRES_DB: postgres
         ports:
-          - 5417:5432
+          - 5418:5432
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 2s
@@ -79,10 +79,58 @@ jobs:
       - name: Run compatibility tests
         env:
           TEST_PG_HOST: localhost
-          TEST_PG_PORT: "5417"
+          TEST_PG_PORT: "5418"
           TEST_PG_USER: postgres
           TEST_PG_PASS: test
         run: bun test tests/compat/ --timeout 180000
+
+  pgtap:
+    name: pgTAP (PG18)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5418:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install build deps + pgTAP
+        run: |
+          sudo apt-get update -qq
+          # Try apt package first (Ubuntu may have it for PG18)
+          sudo apt-get install -y -qq \
+            postgresql-client-18 \
+            libtap-parser-sourcehandler-pgtap-perl \
+            cpanminus \
+            build-essential \
+            postgresql-server-dev-18 || true
+          # Ensure pg_prove Perl module is available
+          sudo cpanm --quiet TAP::Parser::SourceHandler::pgTAP || true
+          # Build pgtap from source and install into the running PG18
+          git clone --depth 1 https://github.com/theory/pgtap.git /tmp/pgtap
+          cd /tmp/pgtap
+          make PG_CONFIG=$(pg_config --bindir)/pg_config 2>/dev/null || make
+          PGPASSWORD=test make install PGHOST=localhost PGPORT=5418 PGUSER=postgres 2>/dev/null || \
+            sudo make install PG_CONFIG=$(pg_config --bindir)/pg_config 2>/dev/null || true
+          # Create the pgtap extension in the test database
+          PGPASSWORD=test psql -h localhost -p 5418 -U postgres \
+            -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
+      - name: Run pgTAP tests
+        env:
+          PGPASSWORD: test
+        run: |
+          pg_prove -h localhost -p 5418 -U postgres -d postgres \
+            tests/pgtap/ --verbose --timer
 
   build:
     runs-on: ${{ matrix.os }}
