@@ -831,14 +831,15 @@ Unsafe:
 ```sql
 ALTER TABLE users ADD COLUMN tier text NOT NULL DEFAULT 'free';
 ```
-Safe rewrite — 3 steps, 3 separate transactions:
+Safe rewrite — 4 steps, 4 separate transactions:
 ```sql
 -- Step 1: add nullable column (fast, no rewrite)
 ALTER TABLE users ADD COLUMN tier text;
 -- Step 2: backfill (batched DML, see 5.5; not inline)
 UPDATE users SET tier = 'free' WHERE tier IS NULL;
--- Step 3: set constraint after backfill complete
+-- Step 3: set NOT NULL after backfill complete (acquires AccessExclusiveLock, but fast post-backfill)
 ALTER TABLE users ALTER COLUMN tier SET NOT NULL;
+-- Step 4: set default (metadata-only, safe to run after NOT NULL is confirmed)
 ALTER TABLE users ALTER COLUMN tier SET DEFAULT 'free';
 ```
 Note: PG 11+ with an immutable default is safe as a single step. Version-aware.
@@ -917,9 +918,9 @@ See `pg_cast` catalog for the full list of implicit/assignment casts.
 
 Everything else produces an error with instructions:
 ```
-ERROR ST007: ALTER COLUMN TYPE for users.score (int → bigint) requires a full table rewrite.
+ERROR ST007: ALTER COLUMN TYPE for orders.amount (numeric → int) requires a full table rewrite with USING clause.
 Safe approach: add new column, backfill, swap with expand/contract.
-Use: sqlever scaffold type-change users score int bigint
+Use: sqlever scaffold type-change orders amount numeric int
 ```
 
 ---
