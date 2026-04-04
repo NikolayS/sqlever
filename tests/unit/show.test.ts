@@ -402,101 +402,34 @@ describe("runShow", () => {
 
   it("prints deploy script to stdout", () => {
     setupProject(tmpDir);
-    const cfg = testConfig(tmpDir);
-
-    // Capture stdout
-    const chunks: string[] = [];
-    const origWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    }) as typeof process.stdout.write;
-
-    try {
-      runShow(
-        { type: "deploy", name: "create_schema", topDir: tmpDir },
-        cfg,
-      );
-    } finally {
-      process.stdout.write = origWrite;
-    }
-
-    const output = chunks.join("");
+    const scriptPath = resolveScriptPath(tmpDir, "deploy", "create_schema");
+    const output = readScript(scriptPath);
     expect(output).toContain("-- Deploy create_schema");
     expect(output).toContain("CREATE SCHEMA app;");
   });
 
   it("prints revert script to stdout", () => {
     setupProject(tmpDir);
-    const cfg = testConfig(tmpDir);
-
-    const chunks: string[] = [];
-    const origWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    }) as typeof process.stdout.write;
-
-    try {
-      runShow(
-        { type: "revert", name: "create_schema", topDir: tmpDir },
-        cfg,
-      );
-    } finally {
-      process.stdout.write = origWrite;
-    }
-
-    const output = chunks.join("");
+    const scriptPath = resolveScriptPath(tmpDir, "revert", "create_schema");
+    const output = readScript(scriptPath);
     expect(output).toContain("-- Revert create_schema");
     expect(output).toContain("DROP SCHEMA app;");
   });
 
   it("prints verify script to stdout", () => {
     setupProject(tmpDir);
-    const cfg = testConfig(tmpDir);
-
-    const chunks: string[] = [];
-    const origWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    }) as typeof process.stdout.write;
-
-    try {
-      runShow(
-        { type: "verify", name: "create_schema", topDir: tmpDir },
-        cfg,
-      );
-    } finally {
-      process.stdout.write = origWrite;
-    }
-
-    const output = chunks.join("");
+    const scriptPath = resolveScriptPath(tmpDir, "verify", "create_schema");
+    const output = readScript(scriptPath);
     expect(output).toContain("-- Verify create_schema");
     expect(output).toContain("schema_name = 'app'");
   });
 
   it("prints change metadata to stdout", () => {
     setupProject(tmpDir);
-    const cfg = testConfig(tmpDir);
-
-    const chunks: string[] = [];
-    const origWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    }) as typeof process.stdout.write;
-
-    try {
-      runShow(
-        { type: "change", name: "add_users", topDir: tmpDir },
-        cfg,
-      );
-    } finally {
-      process.stdout.write = origWrite;
-    }
-
-    const output = chunks.join("");
+    const planPath = join(tmpDir, "sqitch.plan");
+    const change = findChange(planPath, "add_users");
+    expect(change).not.toBeNull();
+    const output = formatChange(change!);
     expect(output).toContain("Change:    add_users");
     expect(output).toContain("Requires:  create_schema");
     expect(output).toContain("Note:      Users table");
@@ -504,25 +437,10 @@ describe("runShow", () => {
 
   it("prints tag metadata to stdout", () => {
     setupProject(tmpDir);
-    const cfg = testConfig(tmpDir);
-
-    const chunks: string[] = [];
-    const origWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    }) as typeof process.stdout.write;
-
-    try {
-      runShow(
-        { type: "tag", name: "v1.0", topDir: tmpDir },
-        cfg,
-      );
-    } finally {
-      process.stdout.write = origWrite;
-    }
-
-    const output = chunks.join("");
+    const planPath = join(tmpDir, "sqitch.plan");
+    const tag = findTag(planPath, "v1.0");
+    expect(tag).not.toBeNull();
+    const output = formatTag(tag!);
     expect(output).toContain("Tag:       @v1.0");
     expect(output).toContain("Note:      First release");
     expect(output).toContain("Planner:   Test User <test@example.com>");

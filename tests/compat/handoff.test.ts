@@ -12,8 +12,8 @@
 // This proves the "alias sqitch=sqlever" adoption path (issue #77).
 //
 // Prerequisites:
-//   - Docker available (for sqitch/sqitch:latest and postgres:17)
-//   - PostgreSQL reachable at localhost:5417 (docker compose up)
+//   - Docker available (for sqitch/sqitch:latest and postgres:18)
+//   - PostgreSQL reachable at localhost:TEST_PG_PORT (docker compose up or CI service)
 
 import { describe, test, expect, beforeEach, afterEach, beforeAll } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
@@ -36,7 +36,8 @@ import {
 
 const SQITCH_IMAGE = "sqitch/sqitch:latest";
 const PG_HOST_FROM_DOCKER = "host.docker.internal";
-const PG_PORT = 5417;
+// Read port from env so CI can override (compat job uses PG18 on port 5418)
+const PG_PORT = Number(process.env.TEST_PG_PORT ?? "5418");
 const PG_USER = "postgres";
 const PG_PASS = "test";
 const PROJECT_NAME = "handoff_test";

@@ -722,7 +722,7 @@ sqlever diff               # show schema diff between deployed and plan
 sqlever diff --from tag_a --to tag_b
 ```
 
-### 5.12 Offline schema diff — declarative migrations (v1.3)
+### 5.12 Offline schema diff — declarative migrations
 
 Given two schema dumps (or DDL files), compute the migration SQL to get from one to the other. No live database required. No shadow DB. Works in CI with only files.
 
@@ -733,6 +733,7 @@ Given two schema dumps (or DDL files), compute the migration SQL to get from one
 sqlever schema diff before.sql after.sql
 
 # Diff current deployed state against desired schema file
+# `prod` refers to a named target from sqitch.conf or a connection URI — the same format accepted by `sqlever deploy`.
 sqlever schema diff --from prod --to desired_schema.sql
 
 # Desired state workflow: maintain one canonical schema.sql, generate migrations automatically
@@ -762,21 +763,25 @@ sqlever schema diff after.sql before.sql --out migrations/003_add_user_tier.reve
 | RLS policy | `CREATE/ALTER/DROP POLICY ...` |
 | Trigger | `CREATE/DROP TRIGGER ...` |
 | Sequence | `ALTER SEQUENCE ...` |
-| Enum | `ALTER TYPE ... ADD VALUE ...` (append only; removal requires explicit flag) |
+| Enum | `ALTER TYPE ... ADD VALUE ...` (append only; removal requires `--allow-enum-removal`) |
+
+**Enum removal behavior:** When `--allow-enum-removal` is passed and an enum value has been removed, sqlever generates a WARNING and outputs a scaffold rather than direct SQL. Because `ALTER TYPE ... DROP VALUE` does not exist in PostgreSQL, the safe approach is: create a new type with the desired values, rename the old type, cast all columns to the new type, then rename the new type to the original name. The scaffold is emitted for manual review and completion.
 
 **What it explicitly does not handle:**
 
-- Column renames — cannot distinguish rename from drop+add; use `--rename col_a:col_b` hint
+- Column renames — cannot distinguish rename from drop+add; use `--rename table.old_col:new_col` hint (can be specified multiple times)
 - Type changes requiring `USING` clause — flag as error, require manual SQL
 - Data migrations — schema diff only, no DML generation
 
 **Column rename hint:**
 
 ```bash
-sqlever schema diff old.sql new.sql --rename users.name:users.full_name
+sqlever schema diff old.sql new.sql --rename users.name:full_name
 # Generates: ALTER TABLE users RENAME COLUMN name TO full_name
 # Without hint: would generate DROP COLUMN name + ADD COLUMN full_name (data loss)
 ```
+
+`--rename` uses the format `table.old_col:new_col` and can be specified multiple times for multiple renames in a single diff.
 
 **Dependency ordering:**
 
@@ -787,14 +792,14 @@ Output SQL is topologically ordered: drop FKs before drop tables, create tables 
 Parses `pg_dump --schema-only` output — not arbitrary hand-written DDL. pg_dump format is normalized, consistently formatted, and stable. Shadow database mode (spin up Docker Postgres, apply desired schema, dump, diff) is supported opt-in for teams that prefer it.
 
 Two-pass algorithm:
-1. Parse both dumps into object maps keyed by `(schema, object_type, object_name)`
+1. Parse both dumps into object maps keyed by `(schema, object_type, object_name)`. Indexes are keyed by `(schema, table, index_name)` — table-scoped, not global. Index names are resolved within their table's schema; same index name in two schemas is not a conflict.
 2. Compute three sets: added (in B not A), removed (in A not B), changed (in both, body differs)
 3. For changed: diff at attribute level (columns, constraints, indexes, etc.)
 4. Generate SQL, topologically ordered
 
 **`--safe` flag applies automatically** (see 5.13) — diff output is production-safe by default unless `--unsafe` is passed.
 
-### 5.13 Safe mode — production-safe migration rewriting (v1.3)
+### 5.13 Safe mode — production-safe migration rewriting
 
 Every migration sqlever generates or analyzes can be run through safe mode. Safe mode rewrites dangerous single-step operations into the multi-step production-safe equivalent. This is the knowledge from GitLab's `migration_helpers.rb` and postgres.ai's zero-downtime migration guides, embedded directly in the tool.
 
@@ -807,6 +812,14 @@ sqlever deploy --safe                               # block on unsafe patterns, 
 ```
 
 Safe mode is **on by default** for `schema diff` output. Opt-out with `--unsafe`.
+
+**PG version detection (ST001 and all version-aware transformations):**
+
+Safe mode applies version-aware rewrites based on detected PostgreSQL version. Lookup order:
+1. `--pg-version` flag (CLI override)
+2. `[analysis] pg_version` in `sqlever.toml`
+3. Live connection `SELECT version()` if available
+4. Conservative fallback: assume PG < 11
 
 **Safe transformation catalog:**
 
@@ -875,14 +888,15 @@ Unsafe (full table scan + AccessExclusiveLock on PG < 12):
 ```sql
 ALTER TABLE users ALTER COLUMN email SET NOT NULL;
 ```
-Safe rewrite:
+Safe rewrite — 4 steps, 4 separate transactions:
 ```sql
--- Step 1: check constraint NOT VALID (fast)
+-- Step 1: ADD CONSTRAINT ... CHECK ... NOT VALID (fast, no scan)
 ALTER TABLE users ADD CONSTRAINT users_email_not_null CHECK (email IS NOT NULL) NOT VALID;
--- Step 2: validate (scans table, no write blocking)
+-- Step 2: VALIDATE CONSTRAINT (scans table but no write blocking — ShareUpdateExclusiveLock)
 ALTER TABLE users VALIDATE CONSTRAINT users_email_not_null;
--- Step 3 (PG 12+): use constraint as proof — no scan needed
+-- Step 3: SET NOT NULL (PG 12+: uses the validated constraint as proof, no scan needed; metadata-only)
 ALTER TABLE users ALTER COLUMN email SET NOT NULL;
+-- Step 4: DROP CONSTRAINT (cleanup — constraint is now redundant)
 ALTER TABLE users DROP CONSTRAINT users_email_not_null;
 ```
 
@@ -890,9 +904,16 @@ ALTER TABLE users DROP CONSTRAINT users_email_not_null;
 
 **ST007 — ALTER COLUMN TYPE**
 
-Most type changes require a full table rewrite. Safe only for:
-- `varchar(N)` → `varchar(M)` where M > N
-- `char(N)` → `text`
+Most type changes require a full table rewrite. Safe (no rewrite) only for:
+- `varchar(N)` → `varchar(M)` where M > N (widening)
+- `varchar(N)` → `varchar` (removing limit)
+- `varchar` → `text`
+- `char(N)` → `varchar` or `text`
+- `smallint` → `int`, `smallint` → `bigint`, `int` → `bigint` (widening integers)
+- `numeric(p,s)` → `numeric(p2,s2)` where p2 >= p and s2 >= s (widening precision)
+- Any type → `text` (always safe via implicit cast)
+
+See `pg_cast` catalog for the full list of implicit/assignment casts.
 
 Everything else produces an error with instructions:
 ```
@@ -915,17 +936,25 @@ Use: sqlever scaffold rename-column users name full_name
 
 **Multi-step output format:**
 
-When safe mode generates a multi-step rewrite, output is multiple migration files:
+When safe mode generates a multi-step rewrite, it produces two entries in `sqitch.plan`:
 ```
-migrations/
-  003_add_fk_orders_user.deploy.sql     -- step 1: NOT VALID
-  003_add_fk_orders_user.validate.sql   -- step 2: VALIDATE (separate deploy window)
-  003_add_fk_orders_user.revert.sql     -- single revert drops the constraint
-  003_add_fk_orders_user.verify.sql
+add_fk_orders_user [requires: create_orders]
+add_fk_orders_user_validate [requires: add_fk_orders_user]
 ```
-The validate step is a separate Sqitch change depending on the first.
 
-**`sqlever scaffold` subcommand:**
+The deploy/revert/verify file names follow from those change names:
+```
+deploy/add_fk_orders_user.sql          -- step 1: NOT VALID
+deploy/add_fk_orders_user_validate.sql -- step 2: VALIDATE (separate deploy window)
+revert/add_fk_orders_user.sql          -- single revert drops the constraint
+revert/add_fk_orders_user_validate.sql -- no-op or empty (constraint already dropped in step 1 revert)
+verify/add_fk_orders_user.sql
+verify/add_fk_orders_user_validate.sql
+```
+
+The validate step is a separate Sqitch change depending on the first, enabling it to be deployed in a separate window after the application has been updated.
+
+**`sqlever scaffold` subcommand (v1.3):**
 
 ```bash
 sqlever scaffold type-change <table> <column> <from_type> <to_type>
@@ -936,15 +965,15 @@ sqlever scaffold backfill <table> <column> <expression>
 
 Each scaffold generates the full multi-step migration set (expand/fill/contract), ready to fill in.
 
-### 5.14 Verify SQL — static analysis with safe-rewrite suggestions (v1.1 extended in v1.3)
+### 5.14 Static analysis with safe-rewrite suggestions
 
-`sqlever verify-sql` is the standalone static analyzer. In v1.3 it gains the ability to not just flag dangerous patterns but suggest the safe rewrite inline.
+`sqlever analyze` is the standalone static analyzer. In v1.3 it gains the ability to not just flag dangerous patterns but suggest the safe rewrite inline.
 
 ```bash
-sqlever verify-sql migration.sql                    # analyze, report findings
-sqlever verify-sql migration.sql --suggest-rewrites # report + show safe SQL
-sqlever verify-sql migration.sql --rewrite          # output safe version of migration
-sqlever verify-sql migration.sql --format json      # machine-readable for CI/agents
+sqlever analyze migration.sql                    # analyze, report findings
+sqlever analyze migration.sql --suggest-rewrites # report + show safe SQL
+sqlever analyze migration.sql --rewrite          # output safe version of migration
+sqlever analyze migration.sql --format json      # machine-readable for CI/agents
 ```
 
 **Output with `--suggest-rewrites`:**
