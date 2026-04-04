@@ -405,12 +405,13 @@ describe("runShow", () => {
     const cfg = testConfig(tmpDir);
 
     // Capture stdout
-    const chunks: string[] = [];
-    const origWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    }) as typeof process.stdout.write;
+    const written: string[] = [];
+    const spy = spyOn(process.stdout, "write").mockImplementation(
+      (chunk: string | Uint8Array) => {
+        written.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
+        return true;
+      },
+    );
 
     try {
       runShow(
@@ -418,10 +419,10 @@ describe("runShow", () => {
         cfg,
       );
     } finally {
-      process.stdout.write = origWrite;
+      spy.mockRestore();
     }
 
-    const output = chunks.join("");
+    const output = written.join("");
     expect(output).toContain("-- Deploy create_schema");
     expect(output).toContain("CREATE SCHEMA app;");
   });
@@ -430,12 +431,13 @@ describe("runShow", () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
 
-    const chunks: string[] = [];
-    const origWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    }) as typeof process.stdout.write;
+    const written: string[] = [];
+    const spy = spyOn(process.stdout, "write").mockImplementation(
+      (chunk: string | Uint8Array) => {
+        written.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
+        return true;
+      },
+    );
 
     try {
       runShow(
@@ -443,10 +445,10 @@ describe("runShow", () => {
         cfg,
       );
     } finally {
-      process.stdout.write = origWrite;
+      spy.mockRestore();
     }
 
-    const output = chunks.join("");
+    const output = written.join("");
     expect(output).toContain("-- Revert create_schema");
     expect(output).toContain("DROP SCHEMA app;");
   });
@@ -455,12 +457,13 @@ describe("runShow", () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
 
-    const chunks: string[] = [];
-    const origWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    }) as typeof process.stdout.write;
+    const written: string[] = [];
+    const spy = spyOn(process.stdout, "write").mockImplementation(
+      (chunk: string | Uint8Array) => {
+        written.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
+        return true;
+      },
+    );
 
     try {
       runShow(
@@ -468,10 +471,10 @@ describe("runShow", () => {
         cfg,
       );
     } finally {
-      process.stdout.write = origWrite;
+      spy.mockRestore();
     }
 
-    const output = chunks.join("");
+    const output = written.join("");
     expect(output).toContain("-- Verify create_schema");
     expect(output).toContain("schema_name = 'app'");
   });
