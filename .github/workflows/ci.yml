@@ -106,13 +106,21 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: Install pgTAP
         run: |
+          # Add PostgreSQL PGDG apt repo (ubuntu-latest doesn't have PG18 by default)
+          sudo apt-get install -y -qq curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt \
+            $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             postgresql-client-18 \
+            postgresql-server-dev-18 \
             libtap-parser-sourcehandler-pgtap-perl \
             cpanminus \
-            build-essential \
-            postgresql-server-dev-18
+            build-essential
           sudo cpanm --quiet TAP::Parser::SourceHandler::pgTAP
           git clone --depth 1 --branch v1.3.3 \
             https://github.com/theory/pgtap.git /tmp/pgtap
