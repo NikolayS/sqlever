@@ -3,7 +3,7 @@
 // Validates show command: argument parsing, script display, change/tag
 // metadata lookup, error handling, and JSON output mode.
 
-import { describe, expect, it, beforeEach, afterEach } from "bun:test";
+import { describe, expect, it, beforeEach, afterEach, spyOn } from "bun:test";
 import {
   mkdtempSync,
   writeFileSync,
@@ -480,12 +480,13 @@ describe("runShow", () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
 
-    const chunks: string[] = [];
-    const origWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    }) as typeof process.stdout.write;
+    const written: string[] = [];
+    const spy = spyOn(process.stdout, "write").mockImplementation(
+      (chunk: string | Uint8Array) => {
+        written.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
+        return true;
+      },
+    );
 
     try {
       runShow(
@@ -493,10 +494,10 @@ describe("runShow", () => {
         cfg,
       );
     } finally {
-      process.stdout.write = origWrite;
+      spy.mockRestore();
     }
 
-    const output = chunks.join("");
+    const output = written.join("");
     expect(output).toContain("Change:    add_users");
     expect(output).toContain("Requires:  create_schema");
     expect(output).toContain("Note:      Users table");
@@ -506,12 +507,13 @@ describe("runShow", () => {
     setupProject(tmpDir);
     const cfg = testConfig(tmpDir);
 
-    const chunks: string[] = [];
-    const origWrite = process.stdout.write;
-    process.stdout.write = ((chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    }) as typeof process.stdout.write;
+    const written: string[] = [];
+    const spy = spyOn(process.stdout, "write").mockImplementation(
+      (chunk: string | Uint8Array) => {
+        written.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
+        return true;
+      },
+    );
 
     try {
       runShow(
@@ -519,10 +521,10 @@ describe("runShow", () => {
         cfg,
       );
     } finally {
-      process.stdout.write = origWrite;
+      spy.mockRestore();
     }
 
-    const output = chunks.join("");
+    const output = written.join("");
     expect(output).toContain("Tag:       @v1.0");
     expect(output).toContain("Note:      First release");
     expect(output).toContain("Planner:   Test User <test@example.com>");
