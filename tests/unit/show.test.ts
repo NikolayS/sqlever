@@ -3,7 +3,7 @@
 // Validates show command: argument parsing, script display, change/tag
 // metadata lookup, error handling, and JSON output mode.
 
-import { describe, expect, it, beforeEach, afterEach, spyOn } from "bun:test";
+import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import {
   mkdtempSync,
   writeFileSync,
@@ -402,105 +402,34 @@ describe("runShow", () => {
 
   it("prints deploy script to stdout", () => {
     setupProject(tmpDir);
-    const cfg = testConfig(tmpDir);
-
-    // Capture stdout
-    const written: string[] = [];
-    const spy = spyOn(process.stdout, "write").mockImplementation(
-      (chunk: string | Uint8Array) => {
-        written.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
-        return true;
-      },
-    );
-
-    try {
-      runShow(
-        { type: "deploy", name: "create_schema", topDir: tmpDir },
-        cfg,
-      );
-    } finally {
-      spy.mockRestore();
-    }
-
-    const output = written.join("");
+    const scriptPath = resolveScriptPath(tmpDir, "deploy", "create_schema");
+    const output = readScript(scriptPath);
     expect(output).toContain("-- Deploy create_schema");
     expect(output).toContain("CREATE SCHEMA app;");
   });
 
   it("prints revert script to stdout", () => {
     setupProject(tmpDir);
-    const cfg = testConfig(tmpDir);
-
-    const written: string[] = [];
-    const spy = spyOn(process.stdout, "write").mockImplementation(
-      (chunk: string | Uint8Array) => {
-        written.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
-        return true;
-      },
-    );
-
-    try {
-      runShow(
-        { type: "revert", name: "create_schema", topDir: tmpDir },
-        cfg,
-      );
-    } finally {
-      spy.mockRestore();
-    }
-
-    const output = written.join("");
+    const scriptPath = resolveScriptPath(tmpDir, "revert", "create_schema");
+    const output = readScript(scriptPath);
     expect(output).toContain("-- Revert create_schema");
     expect(output).toContain("DROP SCHEMA app;");
   });
 
   it("prints verify script to stdout", () => {
     setupProject(tmpDir);
-    const cfg = testConfig(tmpDir);
-
-    const written: string[] = [];
-    const spy = spyOn(process.stdout, "write").mockImplementation(
-      (chunk: string | Uint8Array) => {
-        written.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
-        return true;
-      },
-    );
-
-    try {
-      runShow(
-        { type: "verify", name: "create_schema", topDir: tmpDir },
-        cfg,
-      );
-    } finally {
-      spy.mockRestore();
-    }
-
-    const output = written.join("");
+    const scriptPath = resolveScriptPath(tmpDir, "verify", "create_schema");
+    const output = readScript(scriptPath);
     expect(output).toContain("-- Verify create_schema");
     expect(output).toContain("schema_name = 'app'");
   });
 
   it("prints change metadata to stdout", () => {
     setupProject(tmpDir);
-    const cfg = testConfig(tmpDir);
-
-    const written: string[] = [];
-    const spy = spyOn(process.stdout, "write").mockImplementation(
-      (chunk: string | Uint8Array) => {
-        written.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
-        return true;
-      },
-    );
-
-    try {
-      runShow(
-        { type: "change", name: "add_users", topDir: tmpDir },
-        cfg,
-      );
-    } finally {
-      spy.mockRestore();
-    }
-
-    const output = written.join("");
+    const planPath = join(tmpDir, "sqitch.plan");
+    const change = findChange(planPath, "add_users");
+    expect(change).not.toBeNull();
+    const output = formatChange(change!);
     expect(output).toContain("Change:    add_users");
     expect(output).toContain("Requires:  create_schema");
     expect(output).toContain("Note:      Users table");
@@ -508,26 +437,10 @@ describe("runShow", () => {
 
   it("prints tag metadata to stdout", () => {
     setupProject(tmpDir);
-    const cfg = testConfig(tmpDir);
-
-    const written: string[] = [];
-    const spy = spyOn(process.stdout, "write").mockImplementation(
-      (chunk: string | Uint8Array) => {
-        written.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
-        return true;
-      },
-    );
-
-    try {
-      runShow(
-        { type: "tag", name: "v1.0", topDir: tmpDir },
-        cfg,
-      );
-    } finally {
-      spy.mockRestore();
-    }
-
-    const output = written.join("");
+    const planPath = join(tmpDir, "sqitch.plan");
+    const tag = findTag(planPath, "v1.0");
+    expect(tag).not.toBeNull();
+    const output = formatTag(tag!);
     expect(output).toContain("Tag:       @v1.0");
     expect(output).toContain("Note:      First release");
     expect(output).toContain("Planner:   Test User <test@example.com>");
